@@ -1,0 +1,12 @@
+﻿List of instances: instancesSmall.txt
+Output File Name: solvedTDLEVRPTW
+Minimization of: TravelTime
+Specific problem instance:  R203-5
+Observe problem type: C1,R1
+Number of customers: 5
+FigliozziTravelTimeType: D1
+Cplex execution time: 7200
+Multiply coeff of CS vertices in MILP (Beta): 3
+Double precision for comparison: 0,0000001
+KnownVehNumberCPLEX: -1
+Memory limit for cplex (MB): 6144
