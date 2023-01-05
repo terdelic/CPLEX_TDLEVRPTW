@@ -24,6 +24,10 @@ namespace CPLEX_TDTSPTW
             return false;
         }
 
+        public static int roundToNearest(double val)
+        {
+            return Convert.ToInt32(Math.Round(val));
+        }
 
     }
 }

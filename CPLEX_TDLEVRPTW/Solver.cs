@@ -1100,14 +1100,14 @@ namespace CPLEX_TDTSPTW
                 //Count the numbers
                 foreach (int varIndex in varIndexXijkOut)
                 {
-                    if (x[varIndex] > 0)
+                    if (Misc.roundToNearest(x[varIndex]) > 0)
                     {
                         numExit++;
                     }
                 }
                 foreach (int varIndex in varIndexXijkIn)
                 {
-                    if (x[varIndex] > 0)
+                    if (Misc.roundToNearest(x[varIndex]) > 0)
                     {
                         numInto++;
                     }
@@ -1137,9 +1137,6 @@ namespace CPLEX_TDTSPTW
                 {
                     if (numExit != 1 || numInto != 1)
                     {
-                        //In some cases the cplex throws this error, and the optimizations stops
-                        //When I rerun the solution for the instance where the error occured, no error appears??
-                        //Perhaps it has something to do with multiple parallel runs (as I do it on for example toggrupa-01)
                         Misc.errOut("User " + um.u._userID + " is either multiple time visited or no at all!");
                     }
                 }
@@ -1180,14 +1177,19 @@ namespace CPLEX_TDTSPTW
                 //Checking departure time for each user excpet ending depot which actually does not have a departure time
                 if (!md.endingDepots.Contains(um))
                 {
+
                     int count = 0;
                     double departureTime = 0;
                     foreach (KeyValuePair<(UserMILP, UserMILP, int), int> pair in md.Tijk)
                     {
                         if (x[pair.Value] > p.doublePrecision && pair.Key.Item1 == um)
                         {
-                            count++;
-                            departureTime += x[pair.Value];
+                            if (Misc.roundToNearest(x[md.Xijk[(pair.Key.Item1, pair.Key.Item2, pair.Key.Item3)]]) > 0)
+                            {
+                                count++;
+                                departureTime += x[pair.Value];
+                            }
+
                         }
                     }
                     //If departure time is used for a user is used multiple times
