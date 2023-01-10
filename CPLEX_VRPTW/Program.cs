@@ -18,17 +18,17 @@ string pathCFG = mainDir + "\\Config and data\\";
 Params p = new Params(mainDir, pathCFG + "cfg.txt");
 
 //Stream for output file
-StreamWriter ofsFinal = new StreamWriter(p.outputFileName + "_" + p.minimizationType.ToString() + "_" + p.travelTimeCompType + ".txt");
+StreamWriter ofsFinal = new StreamWriter(p.outputFileName + "_" + p.minimizationType.ToString() + ".txt");
 
 //Stream for input file containing all small instances and set  values (schneider 2014)
 StreamReader ifs = new StreamReader(pathCFG + p.instancesFile);
 //Delimited
 string d = ";";
 //Header in output line
-string headerLine = "INSATNCE_NAME" + d + "NUM_CUST" + d + "SCHNEIDER_VEH" + d + "SCHNEIDER_DIST" + d + "BETA" + d +
+string headerLine = "INSATNCE_NAME" + d + "NUM_CUST" + d + "SCHNEIDER_VEH" + d + "SCHNEIDER_DIST" + d +
     "KNOWN_VEH_NUM_CPLEX" + d + "MINIMIZATION_TYPE" + d + "CPLEX_MIN_VEH_NUM" + d + "CPLEX_VEH_MIN_STATUS" + d + "CPLEX_VEH_MIN_EXE_TIME_MIN" + d
     + "CPLEX_MIN_SEC_OBJ" + d + "CPLEX_SEC_MIN_STATUS" + d + "CPLEX_SECOBJ_MIN_EXE_TIME_MIN" + d
-    + "SOL_DISTANCE" + d + "SOL_TRAVEL_TIME" + d + "SOL_TOTAL_TIME" + d + "SOL_ENERGY" + d + "SOL_RECHARGING_TIME" + d + "SOL_RECHARGE_AMOUNT" + d + "NUM_OF_RECHARGES" + d + "SOL_USER_CONFIG" + "\n";
+    + "SOL_DISTANCE" + d + "SOL_TRAVEL_TIME" + d + "SOL_TOTAL_TIME" + d + "SOL_USER_CONFIG" + "\n";
 ofsFinal.Write(headerLine);
 
 while (!ifs.EndOfStream)

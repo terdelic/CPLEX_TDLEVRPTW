@@ -98,7 +98,7 @@ namespace CPLEX_TDTSPTW
         //Compute arrival time at user
         public double compArrivalTm(User userBef, User userCur, double befBeginTime, double befServiceTime)
         {
-            return befBeginTime + befServiceTime + p.LinTime(userBef, userCur, befBeginTime + befServiceTime);
+            return befBeginTime + befServiceTime + p.getTime(userBef, userCur);
         }
     }
 }

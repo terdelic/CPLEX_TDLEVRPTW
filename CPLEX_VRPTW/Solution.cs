@@ -13,10 +13,6 @@ namespace CPLEX_TDTSPTW
         public double solutionDist;
         public double solutionTotalTime;
         public double solutionTravelTime;
-        public double solutionEnergy;
-        public double solutionRechargingTime;
-        public int solutionNumOfRecharges;
-        public double solutionRechargeAmount;
 
         public Params p;
         public Solution(Params p)
@@ -30,10 +26,6 @@ namespace CPLEX_TDTSPTW
             solutionDist = 0;
             solutionTotalTime = 0;
             solutionTravelTime = 0;
-            solutionEnergy = 0;
-            solutionRechargingTime = 0;
-            solutionNumOfRecharges = 0;
-            solutionRechargeAmount = 0;
         }
         //Add vehicle to list of vehicles and increase solution values
         public void addVehicle(Vehicle v)
@@ -42,17 +34,12 @@ namespace CPLEX_TDTSPTW
             solutionDist += v.vehicleDist;
             solutionTotalTime += v.vehicleTotalTime;
             solutionTravelTime += v.vehicleTravelTime;
-            solutionEnergy += v.vehicleEnergy;
-            solutionNumOfRecharges += v.vehicleNumOfRecharges;
-            solutionRechargingTime += v.vehicleRechargingTime;
-            solutionRechargeAmount += v.vehicleRechargeAmount;
         }
 
         //Convert solution to string used to write it into txt file, d is demilited
         public string getStrSolutionDetails(string d)
         {
-            string line = d + this.solutionDist + d + this.solutionTravelTime + d + this.solutionTotalTime + d +
-                this.solutionEnergy + d + this.solutionRechargingTime + d+this.solutionRechargeAmount+d + solutionNumOfRecharges+d;
+            string line = d + this.solutionDist + d + this.solutionTravelTime + d + this.solutionTotalTime + d;
             //To be able to reconstruct solution in the case if addtional values will have to be computed
             //I also added the complete configuration of solution (list of users) in the string
             foreach (Vehicle v in vehicles)
