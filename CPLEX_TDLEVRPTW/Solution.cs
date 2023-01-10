@@ -18,6 +18,8 @@ namespace CPLEX_TDTSPTW
         public int solutionNumOfRecharges;
         public double solutionRechargeAmount;
 
+        public double diffBetweenCplexAndReal;
+
         public Params p;
         public Solution(Params p)
         {
@@ -52,7 +54,7 @@ namespace CPLEX_TDTSPTW
         public string getStrSolutionDetails(string d)
         {
             string line = d + this.solutionDist + d + this.solutionTravelTime + d + this.solutionTotalTime + d +
-                this.solutionEnergy + d + this.solutionRechargingTime + d+this.solutionRechargeAmount+d + solutionNumOfRecharges+d;
+                this.solutionEnergy + d + this.solutionRechargingTime + d+this.solutionRechargeAmount+d + solutionNumOfRecharges+d+diffBetweenCplexAndReal+d;
             //To be able to reconstruct solution in the case if addtional values will have to be computed
             //I also added the complete configuration of solution (list of users) in the string
             foreach (Vehicle v in vehicles)

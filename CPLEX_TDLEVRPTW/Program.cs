@@ -28,7 +28,7 @@ string d = ";";
 string headerLine = "INSATNCE_NAME" + d + "NUM_CUST" + d + "SCHNEIDER_VEH" + d + "SCHNEIDER_DIST" + d + "BETA" + d +
     "KNOWN_VEH_NUM_CPLEX" + d + "MINIMIZATION_TYPE" + d + "CPLEX_MIN_VEH_NUM" + d + "CPLEX_VEH_MIN_STATUS" + d + "CPLEX_VEH_MIN_EXE_TIME_MIN" + d
     + "CPLEX_MIN_SEC_OBJ" + d + "CPLEX_SEC_MIN_STATUS" + d + "CPLEX_SECOBJ_MIN_EXE_TIME_MIN" + d
-    + "SOL_DISTANCE" + d + "SOL_TRAVEL_TIME" + d + "SOL_TOTAL_TIME" + d + "SOL_ENERGY" + d + "SOL_RECHARGING_TIME" + d + "SOL_RECHARGE_AMOUNT" + d + "NUM_OF_RECHARGES" + d + "SOL_USER_CONFIG" + "\n";
+    + "SOL_DISTANCE" + d + "SOL_TRAVEL_TIME" + d + "SOL_TOTAL_TIME" + d + "SOL_ENERGY" + d + "SOL_RECHARGING_TIME" + d + "SOL_RECHARGE_AMOUNT" + d + "NUM_OF_RECHARGES" + d+ "DIFF_SEC_CPLEX_AND_REAL"+d+ "SOL_USER_CONFIG" + "\n";
 ofsFinal.Write(headerLine);
 
 while (!ifs.EndOfStream)

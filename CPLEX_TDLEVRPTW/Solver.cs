@@ -17,7 +17,7 @@ namespace CPLEX_TDTSPTW
         double _lastIncumbent;
         int bestTheoryMin;
 
-        internal TerminateCallback(double lastIncumbent,int bestTheoryMin)
+        internal TerminateCallback(double lastIncumbent, int bestTheoryMin)
         {
             _lastIncumbent = lastIncumbent;
             this.bestTheoryMin = bestTheoryMin;
@@ -68,7 +68,7 @@ namespace CPLEX_TDTSPTW
             //Create an instance of MILP graph data: vertices, variables etc.
             //int numEndingDepots = Convert.ToInt32(Math.Ceiling(p.theoryMinNumVehicle * 1.4));
             int numEndingDepots = 5;
-            md = new MILPData(p,numEndingDepots);
+            md = new MILPData(p, numEndingDepots);
             //Cerate basic model Ax=b
             BasicModel bm = populateModelMatrices();
 
@@ -161,7 +161,7 @@ namespace CPLEX_TDTSPTW
                 int varIndexTWStart = um.serviceStartTimeVarInd;
                 bm.xtb[varIndexTWStart] = NumVarType.Float;
                 bm.lb[varIndexTWStart] = um.u.etw;
-                bm.ub[varIndexTWStart] = um == md.depot0 ?um.u.etw: um.u.ltw;
+                bm.ub[varIndexTWStart] = um == md.depot0 ? um.u.etw : um.u.ltw;
 
                 //Load capacity bound
                 int varIndexLoad = um.restLoadVarInd;
@@ -359,7 +359,7 @@ namespace CPLEX_TDTSPTW
                             any = true;
 
                             row[md.Tijk[(i, j, k)]] = p.getSlopeFromLinTime(i.u, j.u, k);
-                            row[md.Xijk[(i, j, k)]] = p.getSectionFromLinTime(i.u, j.u, k) + p.depot.ltw+p.refuelRate*p.batCap + i.u.serviceTime;
+                            row[md.Xijk[(i, j, k)]] = p.getSectionFromLinTime(i.u, j.u, k) + p.depot.ltw + p.refuelRate * p.batCap + i.u.serviceTime;
                         }
                     }
                     if (any)
@@ -371,7 +371,7 @@ namespace CPLEX_TDTSPTW
                             Misc.errOut("All values in a row should not be zero!");
                         }
                         bm.A.Add(row);
-                        bm.b.Add(p.depot.ltw+p.refuelRate*p.batCap);
+                        bm.b.Add(p.depot.ltw + p.refuelRate * p.batCap);
                         bm.eqType.Add("lowerOrEqual");
                     }
                 }
@@ -393,20 +393,20 @@ namespace CPLEX_TDTSPTW
                             any = true;
 
                             row[md.Tijk[(i, j, k)]] = p.getSlopeFromLinTime(i.u, j.u, k);
-                            row[md.Xijk[(i, j, k)]] = p.getSectionFromLinTime(i.u, j.u, k) + p.depot.ltw+ p.refuelRate * p.batCap + i.u.serviceTime;
+                            row[md.Xijk[(i, j, k)]] = p.getSectionFromLinTime(i.u, j.u, k) + p.depot.ltw + p.refuelRate * p.batCap + i.u.serviceTime;
                         }
                     }
                     if (any)
                     {
                         row[i.serviceStartTimeVarInd] = 1;
                         row[j.serviceStartTimeVarInd] = -1;
-                        row[md.Bij[(i, j)]] =2*(p.depot.ltw+ p.refuelRate * p.batCap);
+                        row[md.Bij[(i, j)]] = 2 * (p.depot.ltw + p.refuelRate * p.batCap);
                         if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
                         {
                             Misc.errOut("All values in a row should not be zero!");
                         }
                         bm.A.Add(row);
-                        bm.b.Add(p.depot.ltw+ p.refuelRate * p.batCap);
+                        bm.b.Add(p.depot.ltw + p.refuelRate * p.batCap);
                         bm.eqType.Add("greaterOrEqual");
                     }
                 }
@@ -427,19 +427,19 @@ namespace CPLEX_TDTSPTW
                         if (md.Xijk.ContainsKey((i, j, k)))
                         {
                             any = true;
-                            row[md.Xijk[(i, j, k)]] = p.depot.ltw+ p.refuelRate * p.batCap;
+                            row[md.Xijk[(i, j, k)]] = p.depot.ltw + p.refuelRate * p.batCap;
                         }
                     }
                     if (any)
                     {
                         row[j.serviceStartTimeVarInd] = 1;
-                        row[md.Bij[(i, j)]] = (p.depot.ltw+ p.refuelRate * p.batCap);
+                        row[md.Bij[(i, j)]] = (p.depot.ltw + p.refuelRate * p.batCap);
                         if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
                         {
                             Misc.errOut("All values in a row should not be zero!");
                         }
                         bm.A.Add(row);
-                        bm.b.Add(j.u.etw+2*(p.depot.ltw+ p.refuelRate * p.batCap));
+                        bm.b.Add(j.u.etw + 2 * (p.depot.ltw + p.refuelRate * p.batCap));
                         bm.eqType.Add("lowerOrEqual");
                     }
                 }
@@ -503,7 +503,7 @@ namespace CPLEX_TDTSPTW
                         row[i.serviceStartTimeVarInd] = 1;
                         row[j.serviceStartTimeVarInd] = -1;
                         row[i.restEnergyVarInd] = -p.refuelRate;
-                        row[md.Bij[(i, j)]] = 2*(p.refuelRate*p.batCap+p.depot.ltw);
+                        row[md.Bij[(i, j)]] = 2 * (p.refuelRate * p.batCap + p.depot.ltw);
                         if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
                         {
                             Misc.errOut("All values in a row should not be zero!");
@@ -529,19 +529,19 @@ namespace CPLEX_TDTSPTW
                         if (md.Xijk.ContainsKey((i, j, k)))
                         {
                             any = true;
-                            row[md.Xijk[(i, j, k)]] = p.depot.ltw+p.refuelRate*p.batCap;
+                            row[md.Xijk[(i, j, k)]] = p.depot.ltw + p.refuelRate * p.batCap;
                         }
                     }
                     if (any)
                     {
                         row[j.serviceStartTimeVarInd] = 1;
-                        row[md.Bij[(i, j)]] = p.depot.ltw+p.refuelRate*p.batCap;
+                        row[md.Bij[(i, j)]] = p.depot.ltw + p.refuelRate * p.batCap;
                         if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
                         {
                             Misc.errOut("All values in a row should not be zero!");
                         }
                         bm.A.Add(row);
-                        bm.b.Add(j.u.etw+2*(p.depot.ltw+p.refuelRate*p.batCap));
+                        bm.b.Add(j.u.etw + 2 * (p.depot.ltw + p.refuelRate * p.batCap));
                         bm.eqType.Add("lowerOrEqual");
                     }
                 }
@@ -741,7 +741,7 @@ namespace CPLEX_TDTSPTW
                     {
                         if (md.Xijk.ContainsKey((i, j, k)))
                         {
-                            row[md.Xijk[(i, j, k)]] =-p.batCap+ p.ener(i.u, j.u, k);
+                            row[md.Xijk[(i, j, k)]] = -p.batCap + p.ener(i.u, j.u, k);
                             any = true;
                         }
                     }
@@ -799,7 +799,7 @@ namespace CPLEX_TDTSPTW
                 }
             }
 
-            
+
         }
 
         public void performeVehicleMin()
@@ -841,7 +841,7 @@ namespace CPLEX_TDTSPTW
                 //The default value is 10^75 MB, and here it is limited to a couple of GB (4-8)
                 cplex.SetParam(Cplex.Param.MIP.Limits.TreeMemory, p.memoryLimitCplex);
                 //In vehicle minimization we call a Terminate callbacke to terminate the optimization when minimal theory number is found
-                cplex.Use(new TerminateCallback(double.MaxValue,p.theoryMinNumVehicle));
+                cplex.Use(new TerminateCallback(double.MaxValue, p.theoryMinNumVehicle));
                 //Record starting time (to be able to determine overall execution time)
                 double start = cplex.GetCplexTime();
                 if (cplex.Solve())
@@ -992,7 +992,7 @@ namespace CPLEX_TDTSPTW
                 cplex.SetParam(Cplex.Param.TimeLimit, p.timeLimitCplex);
                 //When it was not working i tried to limit the resolution of a solver to 0.01, but did not help (it was different error=
                 //I left it here as a remainder that it can be used
-                //cplex.SetParam(Cplex.Param.MIP.Tolerances.Linearization,0.01);
+                //cplex.SetParam(Cplex.Param.MIP.Tolerances.Linearization,0.00000001);
                 cplex.SetParam(Cplex.Param.MIP.Limits.TreeMemory, p.memoryLimitCplex);
                 double start = cplex.GetCplexTime();
                 if (cplex.Solve())
@@ -1015,6 +1015,7 @@ namespace CPLEX_TDTSPTW
 
                     if (p.minimizationType == MinimizationType.Distance)
                     {
+                        bestFind.diffBetweenCplexAndReal = cplex.ObjValue - bestFind.solutionDist;
                         if (Math.Abs(cplex.ObjValue - bestFind.solutionDist) > p.doublePrecision)
                         {
                             Misc.errOut("Distance in the cplex solution and recovered solution do not match!");
@@ -1022,6 +1023,7 @@ namespace CPLEX_TDTSPTW
                     }
                     else if (p.minimizationType == MinimizationType.TravelTime)
                     {
+                        bestFind.diffBetweenCplexAndReal = cplex.ObjValue - bestFind.solutionTravelTime;
                         if (Math.Abs(cplex.ObjValue - bestFind.solutionTravelTime) > p.doublePrecision)
                         {
                             Misc.errOut("Travel time in the cplex solution and recovered solution do not match!");
@@ -1029,6 +1031,7 @@ namespace CPLEX_TDTSPTW
                     }
                     else if (p.minimizationType == MinimizationType.TotalTime)
                     {
+                        bestFind.diffBetweenCplexAndReal = cplex.ObjValue - bestFind.solutionTotalTime;
                         if (Math.Abs(cplex.ObjValue - bestFind.solutionTotalTime) > p.doublePrecision)
                         {
                             Misc.errOut("Total time in the cplex solution and recovered solution do not match!");
@@ -1100,14 +1103,15 @@ namespace CPLEX_TDTSPTW
                 //Count the numbers
                 foreach (int varIndex in varIndexXijkOut)
                 {
-                    if (Misc.roundToNearest(x[varIndex]) > 0)
+                    //Has to be larger than p.doublePrecision because some values, althoug marked as integer bettween [0,1] have values for example 10^-5
+                    if (x[varIndex] > p.doublePrecision)
                     {
                         numExit++;
                     }
                 }
                 foreach (int varIndex in varIndexXijkIn)
                 {
-                    if (Misc.roundToNearest(x[varIndex]) > 0)
+                    if (x[varIndex] > p.doublePrecision)
                     {
                         numInto++;
                     }
@@ -1184,7 +1188,7 @@ namespace CPLEX_TDTSPTW
                     {
                         if (x[pair.Value] > p.doublePrecision && pair.Key.Item1 == um)
                         {
-                            if (Misc.roundToNearest(x[md.Xijk[(pair.Key.Item1, pair.Key.Item2, pair.Key.Item3)]]) > 0)
+                            if (x[md.Xijk[(pair.Key.Item1, pair.Key.Item2, pair.Key.Item3)]] > p.doublePrecision)
                             {
                                 count++;
                                 departureTime += x[pair.Value];
@@ -1214,13 +1218,28 @@ namespace CPLEX_TDTSPTW
                     {
                         Misc.errOut("Wrong set!");
                     }
+                    //Compare departure times
                     if (Math.Abs(departureTime - computedDepartureTime) > p.doublePrecision)
                     {
                         Misc.errOut("Departure times in cplex solution do not match!");
                     }
                 }
             }
-
+            //Often when double resolution is lower 10^-7 the xijk value has a zero, or near zero value (10^-8).
+            //The problem occurs when the value is 10^-8, then corresponding Tijk value can have a valeu larger than zero, i.e. 10^-5
+            //which lead to errors when comparing extracted solution and cplex solution, thats why we decreased the double resoltion to 10^-3
+            foreach (KeyValuePair<(UserMILP, UserMILP, int), int> pair in md.Xijk)
+            {
+                if (x[pair.Value] <= p.doublePrecision)
+                {
+                    int indextijkVal = md.Tijk[(pair.Key.Item1, pair.Key.Item2, pair.Key.Item3)];
+                    if (x[indextijkVal] > p.doublePrecision)
+                    {
+                        Misc.errOut("The xijk values is zero, while the tijk values is larger than zero!");
+                    }
+                }
+            }
+            //Compare number of arcs for ending depots
             if (numInputArcsEndDepots != numVehs)
             {
                 Misc.errOut("Number of input arcs into ending depots differs from num of vehicles!");
@@ -1236,12 +1255,13 @@ namespace CPLEX_TDTSPTW
             int numVeh = 0;
             foreach (KeyValuePair<(UserMILP, UserMILP, int), int> pair in md.Xijk)
             {
-                if (x[pair.Value] > 0 && pair.Key.Item1 == md.depot0)
+                if (x[pair.Value] > p.doublePrecision && pair.Key.Item1 == md.depot0)
                 {
                     numVeh++;
                     //New vehicle
                     Vehicle v = new Vehicle(p, s.vehicles.Count, s);
                     //Arc 0->j
+                    UserMILP ui = pair.Key.Item1;
                     UserMILP uj = pair.Key.Item2;
                     while (true)
                     {
@@ -1257,9 +1277,9 @@ namespace CPLEX_TDTSPTW
                         {
                             v.route.Add(uj.u);
                             v.updateVehicle();
-                            UserMILP ui = uj;
+                            //UserMILP ui = uj;
 
-                            double beginTimeCplex = x[ui.serviceStartTimeVarInd];
+                            double beginTimeCplex = x[uj.serviceStartTimeVarInd];
                             if (!Misc.EqualDoubleValues(beginTimeCplex, uj.u.beginTime, p.doublePrecision))
                             {
                                 Misc.errOut("Begin times do not coincide!");
@@ -1268,7 +1288,7 @@ namespace CPLEX_TDTSPTW
                             //Console.WriteLine("Computed begin time:"+uj.u.beginTime);
                             //Console.WriteLine("Cplex begin time:" + beginTime);
 
-                            double restBatCap = x[ui.restEnergyVarInd];
+                            double restBatCap = x[uj.restEnergyVarInd];
                             //Console.WriteLine("Computed rest bat cap:" + uj.u.restBatCapAtArrival);
                             //Console.WriteLine("Cplex rest bat cap:" + restBatCap);
 
@@ -1280,13 +1300,13 @@ namespace CPLEX_TDTSPTW
                             //Console.WriteLine("Computed departure time:" + uj.u.departureTime);
 
                             //Checking departure time for each user excpet ending depot which actually does not have a departure time
-                            if (!md.endingDepots.Contains(ui))
+                            if (!md.endingDepots.Contains(uj))
                             {
                                 int count = 0;
                                 double departureTimeCplex = 0;
                                 foreach (KeyValuePair<(UserMILP, UserMILP, int), int> pair3 in md.Tijk)
                                 {
-                                    if (x[pair3.Value] > p.doublePrecision && pair3.Key.Item1 == ui)
+                                    if (x[pair3.Value] > p.doublePrecision && pair3.Key.Item1 == uj)
                                     {
                                         count++;
                                         departureTimeCplex += x[pair3.Value];
@@ -1309,9 +1329,10 @@ namespace CPLEX_TDTSPTW
                             }
                             foreach (KeyValuePair<(UserMILP, UserMILP, int), int> pair2 in md.Xijk)
                             {
-                                if (pair2.Key.Item1 == ui && x[pair2.Value] > 0)
+                                if (pair2.Key.Item1 == uj && x[pair2.Value] > p.doublePrecision)
                                 {
                                     //Arc i->j is used
+                                    ui = uj;
                                     uj = pair2.Key.Item2;
                                     break;
                                 }
