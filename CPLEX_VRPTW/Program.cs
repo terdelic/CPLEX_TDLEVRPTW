@@ -18,7 +18,7 @@ string pathCFG = mainDir + "\\Config and data\\";
 Params p = new Params(mainDir, pathCFG + "cfg.txt");
 
 //Stream for output file
-StreamWriter ofsFinal = new StreamWriter(p.outputFileName + "_" + p.minimizationType.ToString() + ".txt");
+StreamWriter ofsFinal = new StreamWriter(p.outputFileName + "_" + p.problemType.ToString() + "_" + p.minimizationType.ToString() + ".txt");
 
 //Stream for input file containing all small instances and set  values (schneider 2014)
 StreamReader ifs = new StreamReader(pathCFG + p.instancesFile);

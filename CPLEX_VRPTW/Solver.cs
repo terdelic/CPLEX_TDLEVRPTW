@@ -120,17 +120,32 @@ namespace CPLEX_TDTSPTW
             //Users
             foreach (UserMILP um in md.getV0N())
             {
-                //Service start time windows bound
-                int varIndexTWStart = um.serviceStartTimeVarInd;
-                bm.xtb[varIndexTWStart] = NumVarType.Float;
-                bm.lb[varIndexTWStart] = um.u.etw;
-                bm.ub[varIndexTWStart] = um == md.startDepot ? um.u.etw : um.u.ltw;
+                if (p.problemType == ProblemType.VRPTW || p.problemType == ProblemType.TSPTW)
+                {
+                    //Service start time windows bound
+                    int varIndexTWStart = um.serviceStartTimeVarInd;
+                    bm.xtb[varIndexTWStart] = NumVarType.Float;
+                    bm.lb[varIndexTWStart] = um.u.etw;
+                    bm.ub[varIndexTWStart] = um == md.startDepot ? um.u.etw : um.u.ltw;
+                }
 
-                //Load capacity bound
-                int varIndexLoad = um.restLoadVarInd;
-                bm.xtb[varIndexLoad] = NumVarType.Float;
-                bm.lb[varIndexLoad] = um == md.startDepot ? p.loadCap : 0;
-                bm.ub[varIndexLoad] = p.loadCap;
+                if (p.problemType == ProblemType.CVRP || p.problemType == ProblemType.VRPTW)
+                {
+                    //Load capacity bound
+                    int varIndexLoad = um.restLoadVarInd;
+                    bm.xtb[varIndexLoad] = NumVarType.Float;
+                    bm.lb[varIndexLoad] = um == md.startDepot ? p.loadCap : 0;
+                    bm.ub[varIndexLoad] = p.loadCap;
+                }
+
+                if (p.problemType == ProblemType.TSP)
+                {
+                    //Subtour elimination
+                    int varIndexSubTour = um.subTourInd;
+                    bm.xtb[varIndexSubTour] = NumVarType.Int;
+                    bm.lb[varIndexSubTour] = p.depot._userID + 1;
+                    bm.ub[varIndexSubTour] = p.users.Count - 1;
+                }
             }
 
             //Equations Ax=b
@@ -180,23 +195,63 @@ namespace CPLEX_TDTSPTW
             }
 
 
-            // Flow conservation-> number of exit arcs has to be equal to the number of entry arcs for all arcs in all time periods
-            //tex: $\forall j \in V$ $\sum_{i \in V_{N+1}, i \neq j} x_{ji} + \sum_{i \in V_{0}, i \neq j} x_{ij} \leq 1$ 
-            foreach (UserMILP i in md.getV())
+            // Flow conservation
+            //tex: $\forall i \in V \forall j \in V, i \neq j$ $st_{i}-st_j +Nx_{ij} \leq N-1$ 
+
+            if (p.problemType == ProblemType.TSP)
             {
+                foreach (UserMILP i in md.getV())
+                {
+                    foreach (UserMILP j in md.getV())
+                    {
+                        bool any = false;
+                        double[] row = new double[md.numVars];
+                        if (md.Xij.ContainsKey((i, j)))
+                        {
+                            row[i.subTourInd] = 1;
+                            row[j.subTourInd] = -1;
+                            row[md.Xij[(i, j)]] = p.users.Count;
+                            any = true;
+                        }
+                        if (any)
+                        {
+                            if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
+                            {
+                                Misc.errOut("All values in a row should not be zero!");
+                            }
+                            bm.A.Add(row);
+                            bm.b.Add(p.users.Count - 1);
+                            bm.eqType.Add("lowerOrEqual");
+                        }
+                    }
+
+                }
+            }
+
+
+            if (p.problemType == ProblemType.VRPTW)
+            {
+                // Flow conservation-> number of exit arcs has to be equal to the number of entry arcs for all arcs in all time periods
+                //tex: $\forall j \in V'$ $\sum_{i \in V_{N+1}, i \neq j} x_{ji} -\sum_{i \in V_{0}, i \neq j} x_{ij} = 0$ 
                 foreach (UserMILP j in md.getV())
                 {
                     bool any = false;
                     double[] row = new double[md.numVars];
-                    if (md.Xij.ContainsKey((j, i)))
+                    foreach (UserMILP i in md.getVN())
                     {
-                        row[md.Xij[(j, i)]] += 1;
-                        any = true;
+                        if (md.Xij.ContainsKey((j, i)))
+                        {
+                            row[md.Xij[(j, i)]] += 1;
+                            any = true;
+                        }
                     }
-                    if (md.Xij.ContainsKey((i, j)))
+                    foreach (UserMILP i in md.getV0())
                     {
-                        any = true;
-                        row[md.Xij[(i, j)]] += 1;
+                        if (md.Xij.ContainsKey((i, j)))
+                        {
+                            any = true;
+                            row[md.Xij[(i, j)]] -= 1;
+                        }
                     }
                     if (any)
                     {
@@ -205,69 +260,75 @@ namespace CPLEX_TDTSPTW
                             Misc.errOut("All values in a row should not be zero!");
                         }
                         bm.A.Add(row);
-                        bm.b.Add(1);
-                        bm.eqType.Add("lowerOrEqual");
+                        bm.b.Add(0);
+                        bm.eqType.Add("equal");
                     }
-                }
 
+
+                }
             }
 
             // Equation for time feasibility for arcs leaving customers and depot
             //tex: $\forall i \in V_0, \forall j \in V_{N+1} ~ i\neq j $ $t_i+x_{ij}(s_i+ t_{ij})- l_0(1-x_{ij}) \leq t_j$ 
 
-            foreach (UserMILP i in md.getV0())
+            if (p.problemType == ProblemType.TSPTW || p.problemType == ProblemType.VRPTW)
             {
-                foreach (UserMILP j in md.getVN())
+                foreach (UserMILP i in md.getV0())
                 {
-                    double[] row = new double[md.numVars];
-                    bool any = false;
-                    if (md.Xij.ContainsKey((i, j)))
+                    foreach (UserMILP j in md.getVN())
                     {
-                        any = true;
-                        row[md.Xij[(i, j)]] = p.getTime(i.u, j.u) + p.depot.ltw + i.u.serviceTime;
-                    }
-                    if (any)
-                    {
-                        row[i.serviceStartTimeVarInd] = 1;
-                        row[j.serviceStartTimeVarInd] = -1;
-                        if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
+                        double[] row = new double[md.numVars];
+                        bool any = false;
+                        if (md.Xij.ContainsKey((i, j)))
                         {
-                            Misc.errOut("All values in a row should not be zero!");
+                            any = true;
+                            row[md.Xij[(i, j)]] = p.getTime(i.u, j.u) + p.depot.ltw + i.u.serviceTime;
                         }
-                        bm.A.Add(row);
-                        bm.b.Add(p.depot.ltw);
-                        bm.eqType.Add("lowerOrEqual");
+                        if (any)
+                        {
+                            row[i.serviceStartTimeVarInd] = 1;
+                            row[j.serviceStartTimeVarInd] = -1;
+                            if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
+                            {
+                                Misc.errOut("All values in a row should not be zero!");
+                            }
+                            bm.A.Add(row);
+                            bm.b.Add(p.depot.ltw);
+                            bm.eqType.Add("lowerOrEqual");
+                        }
                     }
                 }
             }
 
-
             // Equation for reamining load capcity flow conservation
             //tex: $\forall i \in V_0, \forall j \in V_{N+1}~ i\neq j, u_j \leq u_i- x_{ij} (q_i+C)+C$ 
 
-            foreach (UserMILP i in md.getV0())
+            if (p.problemType == ProblemType.CVRP || p.problemType == ProblemType.VRPTW)
             {
-                foreach (UserMILP j in md.getVN())
+                foreach (UserMILP i in md.getV0())
                 {
-                    double[] row = new double[md.numVars];
-                    row[j.restLoadVarInd] = 1;
-                    row[i.restLoadVarInd] = -1;
-                    bool any = false;
+                    foreach (UserMILP j in md.getVN())
+                    {
+                        double[] row = new double[md.numVars];
+                        row[j.restLoadVarInd] = 1;
+                        row[i.restLoadVarInd] = -1;
+                        bool any = false;
 
-                    if (md.Xij.ContainsKey((i, j)))
-                    {
-                        row[md.Xij[(i, j)]] = i.u.demand + p.loadCap;
-                        any = true;
-                    }
-                    if (any)
-                    {
-                        if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
+                        if (md.Xij.ContainsKey((i, j)))
                         {
-                            Misc.errOut("All values in a row should not be zero!");
+                            row[md.Xij[(i, j)]] = i.u.demand + p.loadCap;
+                            any = true;
                         }
-                        bm.A.Add(row);
-                        bm.b.Add(p.loadCap);
-                        bm.eqType.Add("lowerOrEqual");
+                        if (any)
+                        {
+                            if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
+                            {
+                                Misc.errOut("All values in a row should not be zero!");
+                            }
+                            bm.A.Add(row);
+                            bm.b.Add(p.loadCap);
+                            bm.eqType.Add("lowerOrEqual");
+                        }
                     }
                 }
             }
@@ -631,6 +692,14 @@ namespace CPLEX_TDTSPTW
             //Create instance of solution
             Solution s = new Solution(p);
             int numVeh = 0;
+
+            foreach (KeyValuePair<(UserMILP, UserMILP), int> pair in md.Xij)
+            {
+                if (x[pair.Value] > p.doublePrecision)
+                {
+                    Console.WriteLine(pair.Key.Item1.u._userID + "->" + pair.Key.Item2.u._userID + "->");
+                }
+            }
             foreach (KeyValuePair<(UserMILP, UserMILP), int> pair in md.Xij)
             {
                 if (x[pair.Value] > p.doublePrecision && pair.Key.Item1 == md.startDepot)

@@ -14,6 +14,14 @@ namespace CPLEX_TDTSPTW
         TravelTime,
         Energy
     }
+
+    public enum ProblemType
+    {
+        TSP,
+        TSPTW,
+        CVRP,
+        VRPTW
+    }
     //Enum for user type
     public enum UserType
     {
@@ -37,7 +45,7 @@ namespace CPLEX_TDTSPTW
         public string[] observedNumCust;
 
         public MinimizationType minimizationType;
-
+        public ProblemType problemType;
 
         public List<Customer> customers;
         //Users list contains both customers and stations (not depot)
@@ -82,6 +90,8 @@ namespace CPLEX_TDTSPTW
                 StreamReader ifs = new StreamReader(cfgFilePath);
                 instancesFile = ifs.ReadLine().Split(':')[1].Trim();
                 outputFileName = ifs.ReadLine().Split(':')[1].Trim();
+                string strProblemType = ifs.ReadLine().Split(':')[1].Trim();
+                problemType = GetProblemType(strProblemType);
                 string strMinimizationType = ifs.ReadLine().Split(':')[1].Trim();
                 minimizationType = GetMinimizationType(strMinimizationType);
                 //If there is anyting written in the line specific problems, than parse it and solve only this instance
@@ -114,6 +124,10 @@ namespace CPLEX_TDTSPTW
                 timeLimitCplex = Convert.ToInt32(ifs.ReadLine().Split(':')[1].Trim());
                 doublePrecision = Convert.ToDouble(ifs.ReadLine().Split(':')[1].Trim());
                 knownVehNumberCPLEX = Convert.ToInt32(ifs.ReadLine().Split(':')[1].Trim());
+                if (problemType==ProblemType.TSP || problemType == ProblemType.TSPTW)
+                {
+                    knownVehNumberCPLEX = 1;
+                }
                 memoryLimitCplex = Convert.ToInt32(ifs.ReadLine().Split(':')[1].Trim());
                 ifs.Close();
             }
@@ -142,6 +156,25 @@ namespace CPLEX_TDTSPTW
                 default:
                     Misc.errOut("Unknown minization type! Returning distance!");
                     return MinimizationType.Distance; ;
+            }
+        }
+
+        //Get enum problem type
+        public ProblemType GetProblemType(string minimizationType)
+        {
+            switch (minimizationType)
+            {
+                case "TSP":
+                    return ProblemType.TSP;
+                case "TSPTW":
+                    return ProblemType.TSPTW;
+                case "CVRP":
+                    return ProblemType.CVRP;
+                case "VRPTW":
+                    return ProblemType.VRPTW;
+                default:
+                    Misc.errOut("Unknown problem type, returning TSP!");
+                    return ProblemType.TSP;
             }
         }
 
@@ -191,16 +224,29 @@ namespace CPLEX_TDTSPTW
                     string type = splitLine[1];
                     double x = Convert.ToDouble(splitLine[2]);
                     double y = Convert.ToDouble(splitLine[3]);
-                    //double demand = Convert.ToDouble(splitLine[4]);
-                    //double etw = Convert.ToDouble(splitLine[5]);
-                    //double ltw = Convert.ToDouble(splitLine[6]);
-                    //double stw = Convert.ToDouble(splitLine[7]);
+                    double demand = Convert.ToDouble(splitLine[4]);
+                    double etw = Convert.ToDouble(splitLine[5]);
+                    double ltw = Convert.ToDouble(splitLine[6]);
+                    double stw = Convert.ToDouble(splitLine[7]);
 
                     //FOR tsp
-                    double demand = 0;
-                    double etw = 0;
-                    double ltw = 10000000;
-                    double stw = 0;
+                    if (problemType == ProblemType.TSP)
+                    {
+                        demand = 0;
+                        etw = 0;
+                        ltw = 1000000; //Not working with double.MaxValue
+                        stw = 0;
+                    }
+                    else if (problemType == ProblemType.TSPTW)
+                    {
+                        demand = 0;
+                    }
+                    else if (problemType == ProblemType.CVRP)
+                    {
+                        etw = 0;
+                        ltw =1000000;//Not working with double.MaxValue
+                        stw = 0;
+                    }
 
                     sumDemand += demand;
                     if (type == "d")
@@ -228,8 +274,10 @@ namespace CPLEX_TDTSPTW
                 splitLine = ifs.ReadLine().Trim().Replace('.', ',').Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 splitLine = ifs.ReadLine().Trim().Replace('.', ',').Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 loadCap = Convert.ToDouble(splitLine[splitLine.Length - 1].Replace('/', ' ').Trim());
-                //For tsp
-                loadCap = 10000;
+                if (problemType == ProblemType.TSP || problemType==ProblemType.TSPTW)
+                {
+                    loadCap = 100000;//Not working with double.MaxValue
+                }             
                 splitLine = ifs.ReadLine().Trim().Replace('.', ',').Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 splitLine = ifs.ReadLine().Trim().Replace('.', ',').Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 ifs.Close();

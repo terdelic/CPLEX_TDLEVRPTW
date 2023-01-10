@@ -1,10 +1,11 @@
 ﻿List of instances: instancesSmall.txt
-Output File Name: solvedTSPTW
+Output File Name: solved
+Problem Type (VRPTW, CVRP, TSPTW, TSP): TSPTW
 Minimization of: Distance
-Specific problem instance:  
+Specific problem instance:  C103-5
 Observe problem type: C1,R1,C2,R2,RC1,RC2
 Number of customers: 5
 Cplex execution time: 7200
 Double precision for comparison: 0,00001
-KnownVehNumberCPLEX: 1
+KnownVehNumberCPLEX: -1
 Memory limit for cplex (MB): 6144

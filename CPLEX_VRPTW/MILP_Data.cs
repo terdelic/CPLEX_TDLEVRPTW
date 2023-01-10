@@ -16,6 +16,7 @@ namespace CPLEX_TDTSPTW
         public User u;
         public int restLoadVarInd;
         public int serviceStartTimeVarInd;
+        public int subTourInd;
     }
 
     /* Basic model contains equations for solving Ax=b,
@@ -137,9 +138,7 @@ namespace CPLEX_TDTSPTW
             }
 
             /*Dictionary for decision variables
-             * Xijk - binary variable indicating whether the arc i,j,k is used or not
-             * Tijk - float variable indicating the departure time forim user i to user j in time priod k - to be clear only in one period k this value can be >0
-             * Bij - binary variable for choosing max between begin of service and early time window (has to be ij)
+             * Xijk - binary variable indicating whether the arc i,j
              * */
             int varIndex = 0;
             foreach (UserMILP uI in getV0())
@@ -156,16 +155,26 @@ namespace CPLEX_TDTSPTW
 
             /*For all vertices set decision variables
              * restLoadVarInd - rest load capacity at arrival at user i
-             * restEnergyVarInd - rest energy level at ARRIVAL(!) at user I
              * serviceStartTimeVarInd - the start time of service at user i
              */
             foreach (UserMILP u in getV0N())
             {
-                u.restLoadVarInd = varIndex;
-                varIndex++;
-                //Not sure if this decision variable can actually be removed??? (as we have departure time -tricky)
-                u.serviceStartTimeVarInd = varIndex;
-                varIndex++;
+                if (p.problemType == ProblemType.CVRP || p.problemType == ProblemType.VRPTW)
+                {
+                    u.restLoadVarInd = varIndex;
+                    varIndex++;
+                }
+                if (p.problemType == ProblemType.VRPTW || p.problemType == ProblemType.TSPTW)
+                {
+                    //Not sure if this decision variable can actually be removed??? (as we have departure time -tricky)
+                    u.serviceStartTimeVarInd = varIndex;
+                    varIndex++;
+                }
+                if (p.problemType == ProblemType.TSP)
+                {
+                    u.subTourInd = varIndex;
+                    varIndex++;
+                }
             }
             numVars = varIndex;
 
