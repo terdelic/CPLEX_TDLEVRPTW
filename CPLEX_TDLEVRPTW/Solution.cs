@@ -8,8 +8,9 @@ namespace CPLEX_TDTSPTW
 {
     public class Solution
     {
+        //List of vehicles in the solution
         public List<Vehicle> vehicles;
-        //Variable used evaluate the solution
+        //Attributes used to evaluate the solution
         public double solutionDist;
         public double solutionTotalTime;
         public double solutionTravelTime;
@@ -17,16 +18,19 @@ namespace CPLEX_TDTSPTW
         public double solutionRechargingTime;
         public int solutionNumOfRecharges;
         public double solutionRechargeAmount;
-
+        //As CPLEX should produce solution that should have some variables equal to zero,
+        // but as this is not the case (sometimes the value is 10^-10, but sometimes its 10^-4) we also store this value, to validate afterwards the produced solution
         public double diffBetweenCplexAndReal;
-
+        //To ease the programming we also store the instance of Params class here
         public Params p;
+        //Constructor
         public Solution(Params p)
         {
             this.p = p;
             vehicles = new List<Vehicle>();
             reset();
         }       
+        //Method to reset solution attributes
         public void reset()
         {         
             solutionDist = 0;
@@ -50,13 +54,13 @@ namespace CPLEX_TDTSPTW
             solutionRechargeAmount += v.vehicleRechargeAmount;
         }
 
-        //Convert solution to string used to write it into txt file, d is demilited
+        //Convert solution to string used to write it into txt file, d is delimiter
         public string getStrSolutionDetails(string d)
         {
             string line = d + this.solutionDist + d + this.solutionTravelTime + d + this.solutionTotalTime + d +
                 this.solutionEnergy + d + this.solutionRechargingTime + d+this.solutionRechargeAmount+d + solutionNumOfRecharges+d+diffBetweenCplexAndReal+d;
             //To be able to reconstruct solution in the case if addtional values will have to be computed
-            //I also added the complete configuration of solution (list of users) in the string
+            //we also added the complete configuration of solution (list of users) in the line string
             foreach (Vehicle v in vehicles)
             {
                 foreach (User u in v.route)

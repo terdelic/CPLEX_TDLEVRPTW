@@ -11,27 +11,27 @@ using ILOG.CPLEX;
 namespace CPLEX_TDTSPTW
 {
     //This is the callback Class used to terminate the search of CPLEX
-    // when theory minimal number is found
+    // when theory minimal number accoridng to CVRP is found
     internal class TerminateCallback : Cplex.MIPInfoCallback
     {
-        double _lastIncumbent;
-        int bestTheoryMin;
+        double lastSolutionValue;
+        int bestTheoryMinVehNum;
 
         internal TerminateCallback(double lastIncumbent, int bestTheoryMin)
         {
-            _lastIncumbent = lastIncumbent;
-            this.bestTheoryMin = bestTheoryMin;
+            lastSolutionValue = lastIncumbent;
+            this.bestTheoryMinVehNum = bestTheoryMin;
         }
         public override void Main()
         {
             //Just to check whether the objective function changed or not
             if (HasIncumbent() &&
-                 System.Math.Abs(_lastIncumbent - GetIncumbentObjValue())
+                 System.Math.Abs(lastSolutionValue - GetIncumbentObjValue())
                      > 1e-5 * (1.0 + System.Math.Abs(GetIncumbentObjValue())))
             {
-                _lastIncumbent = GetIncumbentObjValue();
+                lastSolutionValue = GetIncumbentObjValue();
                 //If minimal number of vehicles is found, terminate the optimization
-                if (Convert.ToInt32(Math.Round(_lastIncumbent, 0)) == bestTheoryMin)
+                if (Convert.ToInt32(Math.Round(lastSolutionValue, 0)) == bestTheoryMinVehNum)
                 {
                     Abort();
                 }
@@ -40,34 +40,39 @@ namespace CPLEX_TDTSPTW
     }
     internal class Solver
     {
-        //Instance of P (usefull)
+        //Instance of Params
         Params p;
-        //Vehicle minimization
+        //Vehicle minimization variables
         private int minVehNumOptCPLEX;
         private Cplex.Status statusVehMin;
         private double minVehExecutionTime;
-
+        private Solution bestFindPrim;
+        //Secondary objective minimization avriables
         private Cplex.Status statuSecObjMin;
         private double minSecObjExecutionTime;
         private double minSecObjOptCPLEX;
-
+        private Solution bestFindSec;
+        //Instances of classes that store the graph values, decision variables and constraints
         private BasicModel bm;
         private MILPData md;
-        private Solution bestFind;
+        //Additional variables
         public string outputLine;
+        private string descriptionLine;
+        //Constructor
         public Solver(Params p)
         {
             this.p = p;
-            //Assume that there is no optimization of vehicle number
+            //If value is -1 we assume that there is no optimization of vehicle number
             minVehNumOptCPLEX = -1;
-
-            Console.WriteLine("Solving TDEVRPTW with full recharge: " + p.instanceName + ", num customers=" + p.customers.Count +
+            descriptionLine = "Solving TDEVRPTW with full recharge: " + p.instanceName + ", num customers=" + p.customers.Count +
                 ", num virtual CSs=" + p.numMultiCSVert + ", knownMinVehNum=" + p.knownVehNumberCPLEX + ", minimization objective: " + p.minimizationType.ToString() +
-                ", Fig Coeffs:" + p.travelTimeCompType);
+                ", Fig Coeffs:" + p.travelTimeCompType;
+            Console.WriteLine(descriptionLine);
 
             //Create an instance of MILP graph data: vertices, variables etc.
             //int numEndingDepots = Convert.ToInt32(Math.Ceiling(p.theoryMinNumVehicle * 1.4));
-            int numEndingDepots = 5;
+            int numEndingDepots = 5; //value of 5 is take as maximum number of vehicles reported by Schneider 2014
+            //Create an instance of MILP data
             md = new MILPData(p, numEndingDepots);
             //Cerate basic model Ax=b
             BasicModel bm = populateModelMatrices();
@@ -91,15 +96,20 @@ namespace CPLEX_TDTSPTW
 
             if (numVehicles == -1 && p.knownVehNumberCPLEX == -1)
             {
-                Console.WriteLine("Can not perform distance minimization without known vehicle number!");
+                Console.WriteLine("Can not perform secondary minimization without known vehicle number!");
             }
             else
             {
-                //Perform minimization of second objective: either distance, travel time etc.
+                //Perform minimization of secondary objective: either distance, travel time etc.
                 md = new MILPData(p, numVehicles);
-                //Cerate basic model Ax=b
+                //Cerate basic model Ax=b again ()
                 bm = populateModelMatrices();
                 performeSecObjectiveMin(bm, numVehicles);
+            }
+            Solution bestFind = bestFindSec;
+            if (bestFind == null)
+            {
+                bestFind = bestFindPrim;
             }
             //Get line string for solution to write it in txt
             outputLine = getSolutionDetails(bestFind);
@@ -109,7 +119,6 @@ namespace CPLEX_TDTSPTW
         {
             //Init basic model vectors
             bm = new BasicModel(md.numVars);
-
             //Upper and lower bounds
 
             //XIJK - binary decision variable (0,1) integer
@@ -120,16 +129,13 @@ namespace CPLEX_TDTSPTW
                 bm.lb[varIndexXijk] = 0;
                 bm.ub[varIndexXijk] = 1;
             }
-
             //TIJK - float variable actually representign departure time
             foreach (KeyValuePair<(UserMILP, UserMILP, int), int> element in md.Tijk)
             {
                 int varIndexTijk = element.Value;
                 bm.xtb[varIndexTijk] = NumVarType.Float;
-                //Ovo je bila greška što nije bilo 0, mora biti 0 jer u u slučajevima u kojima varijabla t_{ij}
-                // nije aktivna jer jer xij=0, i ona mora biti 
+                // Spent a lot of time debugging this, because it was not zero, and it has to be zero in cases when xijk=0
                 bm.lb[varIndexTijk] = 0;
-
                 UserMILP u = element.Key.Item1;
                 if (md.getV0().Contains(u))
                 {
@@ -178,13 +184,13 @@ namespace CPLEX_TDTSPTW
 
             //Equations Ax=b
 
-            /*Only 1 exit arc from eac customer in all time buckets
+            /*Only 1 entry arc in each customer in all time buckets
              *              * */
-            //tex: Equation $\forall i \in V$ $\sum_{k \in K} \sum_{j \in V_{N+1} \cup F', i \neq j} x_{ij}^k=1$ 
-            foreach (UserMILP i in md.getV())
+            //tex: Equation $\forall j \in V$ $\sum_{k \in K} \sum_{i \in V_{0} \cup F', i \neq j} x_{ij}^k=1$ 
+            foreach (UserMILP j in md.getV())
             {
                 double[] row = new double[md.numVars];
-                foreach (UserMILP j in md.getVNm_())
+                foreach (UserMILP i in md.getV0_())
                 {
                     for (int k = 0; k < md.kBuckets; k++)
                     {
@@ -204,13 +210,13 @@ namespace CPLEX_TDTSPTW
             }
 
             /*
-             * At max 1 exit arc from each CS (some could have zero) in all time buckets
+             * At max 1 entry arc in each CS (some could have zero) in all time buckets
              */
-            //tex: $\forall i \in F'$ $\sum_{k \in K} \sum_{j \in V_{N+1} \cup F', i \neq j} x_{ij}^k \leq 1$ 
-            foreach (UserMILP i in md.getF_())
+            //tex: $\forall j \in F' \cup ED$ $\sum_{k \in K} \sum_{i \in V_{0} \cup F', i \neq j} x_{ij}^k \leq 1$ 
+            foreach (UserMILP j in md.getFNm_())
             {
                 double[] row = new double[md.numVars];
-                foreach (UserMILP j in md.getVNm_())
+                foreach (UserMILP i in md.getV0_())
                 {
                     for (int k = 0; k < md.kBuckets; k++)
                     {
@@ -232,7 +238,7 @@ namespace CPLEX_TDTSPTW
 
 
             // Flow conservation-> number of exit arcs has to be equal to the number of entry arcs for all arcs in all time periods
-            //tex: $\forall j \in V \cup F'$ $\sum_{k \in K} \sum_{i \in V_{N+1} \cup F', i \neq j} x_{ji}^k - \sum_{k \in K} \sum_{i \in V_{0} \cup F', i \neq j} x_{ij}^k = 0$ 
+            //tex: $\forall j \in V \cup F'$ $\sum_{k \in K} \sum_{i \in V_{ED} \cup F', i \neq j} x_{ji}^k - \sum_{k \in K} \sum_{i \in V_{0} \cup F', i \neq j} x_{ij}^k = 0$ 
             foreach (UserMILP j in md.getV_())
             {
                 double[] row = new double[md.numVars];
@@ -262,89 +268,33 @@ namespace CPLEX_TDTSPTW
                 bm.eqType.Add("equal");
             }
 
-            /*Only 1 entry arc for each ending depot
+            /*Only 1 entry arc for each ending depot - this was removed as second equation was rewritten to include it
  *              * */
             //tex: Equation $\forall j \in MED$ $\sum_{k \in K} \sum_{i \in V \cup F', i \neq j} x_{ij}^k=1$ 
-            foreach (UserMILP j in md.getMED())
-            {
-                double[] row = new double[md.numVars];
-                foreach (UserMILP i in md.getV_())
-                {
-                    for (int k = 0; k < md.kBuckets; k++)
-                    {
-                        if (md.Xijk.ContainsKey((i, j, k)))
-                        {
-                            row[md.Xijk[(i, j, k)]] = 1;
-                        }
-                    }
-                }
-                if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
-                {
-                    Misc.errOut("All values in a row should not be zero!");
-                }
-                bm.A.Add(row);
-                bm.b.Add(1);
-                bm.eqType.Add("lowerOrEqual");
-            }
-
-
-            // Equation for the computation of service start time at customer (probably can be ommited in future versions)
-            //tex: $\forall i \in V_{0} $ $t_i-\sum_{k \in K} \sum_{j \in V_{N+1} \cup F', i \neq j} t_{ij}^k=-s_i$ 
-            //
-            //Provjeriti
-            foreach (UserMILP i in md.getV0())
-            {
-                double[] row = new double[md.numVars];
-                for (int k = 0; k < md.kBuckets; k++)
-                {
-                    foreach (UserMILP j in md.getVNm_())
-                    {
-                        if (md.Tijk.ContainsKey((i, j, k)))
-                        {
-                            row[md.Tijk[(i, j, k)]] = -1;
-                        }
-                    }
-                }
-                row[i.serviceStartTimeVarInd] = 1;
-                if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
-                {
-                    Misc.errOut("All values in a row should not be zero!");
-                }
-                bm.A.Add(row);
-                bm.b.Add(-i.u.serviceTime);
-                bm.eqType.Add("equal");
-            }
-
-            // Equation for the computation of service start time at CS (probably can be ommited in future versions)
-            //tex: $\forall i \in F' $ $t_i-\sum_{k \in K} \sum_{j \in V_{N+1} \cup F', i \neq j} t_{ij}^k-gy_i=-gQ$ 
-
-            //Provjeriti
-            foreach (UserMILP i in md.getF_())
-            {
-                double[] row = new double[md.numVars];
-                for (int k = 0; k < md.kBuckets; k++)
-                {
-                    foreach (UserMILP j in md.getVNm_())
-                    {
-                        if (md.Tijk.ContainsKey((i, j, k)))
-                        {
-                            row[md.Tijk[(i, j, k)]] = -1;
-                        }
-                    }
-                }
-                row[i.serviceStartTimeVarInd] = 1;
-                row[i.restEnergyVarInd] = -p.refuelRate;
-                if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
-                {
-                    Misc.errOut("All values in a row should not be zero!");
-                }
-                bm.A.Add(row);
-                bm.b.Add(-p.refuelRate * p.batCap);
-                bm.eqType.Add("equal");
-            }
+            //foreach (UserMILP j in md.getMED())
+            //{
+            //    double[] row = new double[md.numVars];
+            //    foreach (UserMILP i in md.getV_())
+            //    {
+            //        for (int k = 0; k < md.kBuckets; k++)
+            //        {
+            //            if (md.Xijk.ContainsKey((i, j, k)))
+            //            {
+            //                row[md.Xijk[(i, j, k)]] = 1;
+            //            }
+            //        }
+            //    }
+            //    if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
+            //    {
+            //        Misc.errOut("All values in a row should not be zero!");
+            //    }
+            //    bm.A.Add(row);
+            //    bm.b.Add(1);
+            //    bm.eqType.Add("lowerOrEqual");
+            //}
 
             // Equation for time feasibility for arcs leaving customers and depot
-            //tex: $\forall i \in V_0, \forall j \in V_{N+1} \cup F'~ i\neq j $ $t_i+s_i \sum_{k \in K}x_{ij}^k+\sum_{k \in K} (\Theta_{ij}^k t_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K} x_{ij}^k) \leq t_j$ 
+            //tex: $\forall i \in V_0, \forall j \in V_{ED} \cup F'~ i\neq j $ $\tau_i+s_i \sum_{k \in K}x_{ij}^k+\sum_{k \in K} (\Theta_{ij}^k \zeta_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K} x_{ij}^k) \leq \tau_j$ 
 
             foreach (UserMILP i in md.getV0())
             {
@@ -377,8 +327,94 @@ namespace CPLEX_TDTSPTW
                 }
             }
 
-            // Equation for time feasibility for arcs leaving customers and depot max fun on begin time -tj
-            //tex: $\forall i \in V_0, \forall j \in V_{N+1} \cup F'~ i\neq j $ $t_i+s_i \sum_{k \in K}x_{ij}^k+\sum_{k \in K} (\Theta_{ij}^k t_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K} x_{ij}^k) +2(l_0+gQ)b_j \geq t_j$ 
+            // Equation for time feasibility for arcs leaving CSs
+            //tex: $\forall i \in F', \forall j \in V_{ED} \cup F'~ i\neq j$ $\tau_i+g(Q-y_i)+\sum_{k \in K} (\Theta_{ij}^k \zeta_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K}x_{ij}^k) \leq \tau_j$ 
+
+            foreach (UserMILP i in md.getF_())
+            {
+                foreach (UserMILP j in md.getVNm_())
+                {
+                    double[] row = new double[md.numVars];
+                    bool any = false;
+                    for (int k = 0; k < md.kBuckets; k++)
+                    {
+                        if (md.Tijk.ContainsKey((i, j, k)) && md.Xijk.ContainsKey((i, j, k)))
+                        {
+                            any = true;
+                            row[md.Tijk[(i, j, k)]] = p.getSlopeFromLinTime(i.u, j.u, k);
+                            row[md.Xijk[(i, j, k)]] = p.getSectionFromLinTime(i.u, j.u, k) + p.depot.ltw + p.refuelRate * p.batCap;
+                        }
+                    }
+                    if (any)
+                    {
+                        row[i.serviceStartTimeVarInd] = 1;
+                        row[j.serviceStartTimeVarInd] = -1;
+                        row[i.restEnergyVarInd] = -p.refuelRate;
+                        if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
+                        {
+                            Misc.errOut("All values in a row should not be zero!");
+                        }
+                        bm.A.Add(row);
+                        bm.b.Add(p.depot.ltw);
+                        bm.eqType.Add("lowerOrEqual");
+                    }
+                }
+            }
+
+            // Equation for the computation of service start time at customer (probably can be ommited in future versions)
+            //tex: $\forall i \in V_{0} $ $\sum_{k \in K} \sum_{j \in V_{ED} \cup F', i \neq j} \zeta_{ij}^k=\tau_i+s_i$ 
+
+            foreach (UserMILP i in md.getV0())
+            {
+                double[] row = new double[md.numVars];
+                for (int k = 0; k < md.kBuckets; k++)
+                {
+                    foreach (UserMILP j in md.getVNm_())
+                    {
+                        if (md.Tijk.ContainsKey((i, j, k)))
+                        {
+                            row[md.Tijk[(i, j, k)]] = -1;
+                        }
+                    }
+                }
+                row[i.serviceStartTimeVarInd] = 1;
+                if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
+                {
+                    Misc.errOut("All values in a row should not be zero!");
+                }
+                bm.A.Add(row);
+                bm.b.Add(-i.u.serviceTime);
+                bm.eqType.Add("equal");
+            }
+
+            // Equation for the computation of service start time at CS (probably can be ommited in future versions)
+            //tex: $\forall i \in F' $ $\sum_{k \in K} \sum_{j \in V_{ED} \cup F', i \neq j} \zeta_{ij}^k=\tau_i+g(Q-y_i)$ 
+            foreach (UserMILP i in md.getF_())
+            {
+                double[] row = new double[md.numVars];
+                for (int k = 0; k < md.kBuckets; k++)
+                {
+                    foreach (UserMILP j in md.getVNm_())
+                    {
+                        if (md.Tijk.ContainsKey((i, j, k)))
+                        {
+                            row[md.Tijk[(i, j, k)]] = -1;
+                        }
+                    }
+                }
+                row[i.serviceStartTimeVarInd] = 1;
+                row[i.restEnergyVarInd] = -p.refuelRate;
+                if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
+                {
+                    Misc.errOut("All values in a row should not be zero!");
+                }
+                bm.A.Add(row);
+                bm.b.Add(-p.refuelRate * p.batCap);
+                bm.eqType.Add("equal");
+            }
+
+            // Equation for time feasibility for arcs leaving customers and depot max fun on begin time - tau j
+            //tex: $\forall i \in V_0, \forall j \in V_{ED} \cup F'~ i\neq j $ $\tau_i+s_i \sum_{k \in K}x_{ij}^k+\sum_{k \in K} (\Theta_{ij}^k \zeta_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K} x_{ij}^k) +2(l_0+gQ)b_{ij} \geq \tau_j$ 
 
             foreach (UserMILP i in md.getV0())
             {
@@ -412,9 +448,8 @@ namespace CPLEX_TDTSPTW
                 }
             }
 
-
-            // Equation for time feasibility for arcs leaving customers and depot max fun on begin time - ej
-            //tex: $\forall i \in V_0, \forall j \in V_{N+1} \cup F'~ i\neq j $ $t_j \leq e_j+(1-b_j)2(l_0+gQ)+b_j(l_0+gQ) -\sum_{k \in K}x_{ij}^k(l_0+gQ)$ 
+            // Equation for time feasibility for arcs leaving customers and depot max fun on begin time - early time winow - ej
+            //tex: $\forall i \in V_0, \forall j \in V_{ED} \cup F'~ i\neq j $ $\tau_j \leq e_j+(1-b_j)2(l_0+gQ)+b_j(l_0+gQ) -\sum_{k \in K}x_{ij}^k(l_0+gQ)$ 
 
             foreach (UserMILP i in md.getV0())
             {
@@ -445,44 +480,8 @@ namespace CPLEX_TDTSPTW
                 }
             }
 
-
-            // Equation for time feasibility for arcs leaving CSs
-            //tex: $\forall i \in F', \forall j \in V_{N+1} \cup F'~ i\neq j$ $t_i+g(Q-y_i)+\sum_{k \in K} (\Theta_{ij}^k t_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K}x_{ij}^k) \leq t_j$ 
-
-            foreach (UserMILP i in md.getF_())
-            {
-                foreach (UserMILP j in md.getVNm_())
-                {
-                    double[] row = new double[md.numVars];
-                    bool any = false;
-                    for (int k = 0; k < md.kBuckets; k++)
-                    {
-                        if (md.Tijk.ContainsKey((i, j, k)) && md.Xijk.ContainsKey((i, j, k)))
-                        {
-                            any = true;
-                            row[md.Tijk[(i, j, k)]] = p.getSlopeFromLinTime(i.u, j.u, k);
-                            row[md.Xijk[(i, j, k)]] = p.getSectionFromLinTime(i.u, j.u, k) + p.depot.ltw + p.refuelRate * p.batCap;
-                        }
-                    }
-                    if (any)
-                    {
-                        row[i.serviceStartTimeVarInd] = 1;
-                        row[j.serviceStartTimeVarInd] = -1;
-                        row[i.restEnergyVarInd] = -p.refuelRate;
-                        if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
-                        {
-                            Misc.errOut("All values in a row should not be zero!");
-                        }
-                        bm.A.Add(row);
-                        bm.b.Add(p.depot.ltw);
-                        bm.eqType.Add("lowerOrEqual");
-                    }
-                }
-            }
-
-            // Equation for time feasibility for arcs leaving CSs - max fun begin time - tj
-            //tex: $\forall i \in F', \forall j \in V_{N+1} \cup F'~ i\neq j$ $t_i+g(Q-y_i)+\sum_{k \in K} (\Theta_{ij}^k t_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K}x_{ij}^k)+2b_j(l_0+gQ) \geq t_j$ 
-
+            // Equation for time feasibility for arcs leaving CSs - max fun begin time - tau_j
+            //tex: $\forall i \in F', \forall j \in V_{ED} \cup F'~ i\neq j$ $\tau_i+g(Q-y_i)+\sum_{k \in K} (\Theta_{ij}^k \zeta_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K}x_{ij}^k)+2b_{ij}(l_0+gQ) \geq \tau_j$ 
             foreach (UserMILP i in md.getF_())
             {
                 foreach (UserMILP j in md.getVNm_())
@@ -516,8 +515,7 @@ namespace CPLEX_TDTSPTW
             }
 
             // Equation for time feasibility for arcs leaving CSs - max fun begin time - etw
-            //tex: $\forall i \in F', \forall j \in V_{N+1} \cup F'~ i\neq j$ $t_j \leq e_j +(1-b)2(l_0+gQ)+b(l_0+gQ)-\sum_{k \in K}x_{ij}^k(l_0+gQ)$ 
-
+            //tex: $\forall i \in F', \forall j \in V_{ED} \cup F'~ i\neq j$ $\tau_j \leq e_j +2(1-b_{ij})(l_0+gQ)+b_{ij}(l_0+gQ)-\sum_{k \in K}x_{ij}^k(l_0+gQ)$ 
             foreach (UserMILP i in md.getF_())
             {
                 foreach (UserMILP j in md.getVNm_())
@@ -550,8 +548,8 @@ namespace CPLEX_TDTSPTW
             // Equation for ensuring that each departure time of customer/CS is within its appropriate breakpointes
             // determined by breakpoints of time buckets and latest departure times at customers/CSs
             // For customers the search space is adequatly reduced, while for CSs this is not the case
-            //tex: $\forall i \in V_0 \cup F', \forall j \in V_{N+1} \cup F'~ i\neq j, \forall k \in K$ $x_{ij}^k \max{ (w_m,e_i+s_i)} \leq t_{ij}^k \leq \min{ (w_{m+1},l_i+s_i)}x_{ij}^k $ 
-
+            //tex: $\forall i \in V_0, \forall j \in V_{ED} \cup F'~ i\neq j, \forall k \in K$ $x_{ij}^k \max{ (w_k,e_i+s_i)} \leq \zeta_{ij}^k \leq \min{ (w_{k+1},l_i+s_i)}x_{ij}^k$ 
+            // $\forall i \in F', \forall j \in V_{ED} \cup F'~ i\neq j, \forall k \in K$ $x_{ij}^k \max{ (w_k,e_i+s_i)} \leq \zeta_{ij}^k \leq \min{ (w_{k+1},l_i+gQ)}x_{ij}^k$
             foreach (UserMILP i in md.getV0_())
             {
                 foreach (UserMILP j in md.getVNm_())
@@ -598,9 +596,8 @@ namespace CPLEX_TDTSPTW
                 }
             }
 
-
             // Equation for reamining load capcity flow conservation
-            //tex: $\forall i \in V_0 \cup F', \forall j \in V_{N+1} \cup F'~ i\neq j, u_j \leq u_i- \sum_{k \in K}x_{ij}^k (q_i+C)+C$ 
+            //tex: $\forall i \in V_0 \cup F', \forall j \in V_{ED} \cup F'~ i\neq j, u_j \leq u_i- \sum_{k \in K}x_{ij}^k (q_i+C)+C$ 
 
             foreach (UserMILP i in md.getV0_())
             {
@@ -632,7 +629,7 @@ namespace CPLEX_TDTSPTW
             }
 
             // Equation for reamining battery capcity flow conservation (energy) for customers
-            //tex: $\forall i \in V, \forall j \in V_{N+1} \cup F'~ i\neq j, y_j \leq y_i- \sum_{k \in K}x_{ij}^k (e_{ij}^k+Q)+Q$ 
+            //tex: $\forall i \in V, \forall j \in V_{ED} \cup F'~ i\neq j, y_j \leq y_i- \sum_{k \in K}x_{ij}^k (e_{ij}^k+Q)+Q$ 
             foreach (UserMILP j in md.getVNm_())
             {
                 foreach (UserMILP i in md.getV())
@@ -662,40 +659,8 @@ namespace CPLEX_TDTSPTW
                 }
             }
 
-            // Equation for reamining battery capcity flow conservation (energy) for customers - exact yj
-            //Exact yj is necesearry only in TD cases when we jave to know the departure times
-            //tex: $\forall i \in V, \forall j \in V_{N+1} \cup F'~ i\neq j, y_j \geq y_i- \sum_{k \in K}x_{ij}^k (e_{ij}^k-Q)-Q$ 
-            foreach (UserMILP j in md.getVNm_())
-            {
-                foreach (UserMILP i in md.getV())
-                {
-                    double[] row = new double[md.numVars];
-                    row[j.restEnergyVarInd] = 1;
-                    row[i.restEnergyVarInd] = -1;
-                    bool any = false;
-                    for (int k = 0; k < md.kBuckets; k++)
-                    {
-                        if (md.Xijk.ContainsKey((i, j, k)))
-                        {
-                            row[md.Xijk[(i, j, k)]] = p.ener(i.u, j.u, k) - p.batCap;
-                            any = true;
-                        }
-                    }
-                    if (any)
-                    {
-                        if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
-                        {
-                            Misc.errOut("All values in a row should not be zero!");
-                        }
-                        bm.A.Add(row);
-                        bm.b.Add(-p.batCap);
-                        bm.eqType.Add("greaterOrEqual");
-                    }
-                }
-            }
-
             // Equation for reamining battery capcity flow conservation (energy) for customers
-            //tex: $\forall i \in F'_0, \forall j \in V_{N+1} \cup F'~ i\neq j, y_j \leq Q- \sum_{k \in K}x_{ij}^k e_{ij}^k$ 
+            //tex: $\forall i \in F'_0, \forall j \in V_{ED} \cup F'~ i\neq j, y_j \leq Q- \sum_{k \in K}x_{ij}^k e_{ij}^k$ 
 
             foreach (UserMILP j in md.getVNm_())
             {
@@ -727,7 +692,40 @@ namespace CPLEX_TDTSPTW
             }
 
             // Equation for reamining battery capcity flow conservation (energy) for customers - exact yj
-            //tex: $\forall i \in F'_0, \forall j \in V_{N+1} \cup F'~ i\neq j, y_j \geq \sum_{k \in K}x_{ij}^k (Q-e_{ij}^k)$ 
+            //Exact yj is necesearry only in TD cases when we jave to know the departure times
+            //tex: $\forall i \in V, \forall j \in V_{ED} \cup F'~ i\neq j, y_j \geq y_i- \sum_{k \in K}x_{ij}^k (e_{ij}^k-Q)-Q$ 
+            foreach (UserMILP j in md.getVNm_())
+            {
+                foreach (UserMILP i in md.getV())
+                {
+                    double[] row = new double[md.numVars];
+                    row[j.restEnergyVarInd] = 1;
+                    row[i.restEnergyVarInd] = -1;
+                    bool any = false;
+                    for (int k = 0; k < md.kBuckets; k++)
+                    {
+                        if (md.Xijk.ContainsKey((i, j, k)))
+                        {
+                            row[md.Xijk[(i, j, k)]] = p.ener(i.u, j.u, k) - p.batCap;
+                            any = true;
+                        }
+                    }
+                    if (any)
+                    {
+                        if (!row.Any(v => !Misc.EqualDoubleValues(v, 0, p.doublePrecision)))
+                        {
+                            Misc.errOut("All values in a row should not be zero!");
+                        }
+                        bm.A.Add(row);
+                        bm.b.Add(-p.batCap);
+                        bm.eqType.Add("greaterOrEqual");
+                    }
+                }
+            }
+
+
+            // Equation for reamining battery capcity flow conservation (energy) for customers - exact yj
+            //tex: $\forall i \in F'_0, \forall j \in V_{ED} \cup F'~ i\neq j, y_j \geq \sum_{k \in K}x_{ij}^k (Q-e_{ij}^k)$ 
 
             foreach (UserMILP j in md.getVNm_())
             {
@@ -798,10 +796,9 @@ namespace CPLEX_TDTSPTW
                     Misc.errOut("Not impelemented in cplex!");
                 }
             }
-
-
         }
 
+        //Method to perform primary minimization - vehicle number
         public void performeVehicleMin()
         {
             Console.WriteLine("Performing vehicle minimization!");
@@ -838,7 +835,7 @@ namespace CPLEX_TDTSPTW
                 //Set time limit
                 cplex.SetParam(Cplex.Param.TimeLimit, p.timeLimitCplex);
                 //It was noted that in some cases that the error out of memory occurs (especially on fast computer like toggrupa-01)
-                //The default value is 10^75 MB, and here it is limited to a couple of GB (4-8)
+                //The default value is large, and here it is limited to a couple of GB (4-8)
                 cplex.SetParam(Cplex.Param.MIP.Limits.TreeMemory, p.memoryLimitCplex);
                 //In vehicle minimization we call a Terminate callbacke to terminate the optimization when minimal theory number is found
                 cplex.Use(new TerminateCallback(double.MaxValue, p.theoryMinNumVehicle));
@@ -848,48 +845,57 @@ namespace CPLEX_TDTSPTW
                 {
                     //Record execution time
                     minVehExecutionTime = cplex.GetCplexTime() - start;
-                    //Get variables
-                    double[] x = cplex.GetValues(var[0]);
-                    double[] slack = cplex.GetSlacks(rng[0]);
-                    cplex.Output().WriteLine("Solution status = " + cplex.GetStatus());
-                    cplex.Output().WriteLine("Solution value = " + cplex.ObjValue);
-
-                    //Check the number of vehicles
-                    for (int k = 0; k < md.kBuckets; k++)
+                    //Get status
+                    this.statusVehMin = cplex.GetStatus();
+                    cplex.Output().WriteLine("Solution status = " + this.statusVehMin);
+                    //Store the oslution only if its feasible and optimal
+                    if (this.statusVehMin == Cplex.Status.Feasible || this.statusVehMin == Cplex.Status.Optimal)
                     {
-                        foreach (UserMILP j in md.getV_())
+                        double[] x = cplex.GetValues(var[0]);
+                        //double[] slack = cplex.GetSlacks(rng[0]);
+                        cplex.Output().WriteLine("Solution value = " + cplex.ObjValue);
+                        //Check the number of vehicles
+                        for (int k = 0; k < md.kBuckets; k++)
                         {
-                            if (md.Xijk.ContainsKey((md.depot0, j, k)))
+                            foreach (UserMILP j in md.getV_())
                             {
-                                int index = md.Xijk[(md.depot0, j, k)];
-                                if (x[index] > p.doublePrecision)
+                                if (md.Xijk.ContainsKey((md.depot0, j, k)))
                                 {
-                                    numVeh++;
+                                    int index = md.Xijk[(md.depot0, j, k)];
+                                    if (x[index] > p.doublePrecision)
+                                    {
+                                        numVeh++;
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (Convert.ToInt32(cplex.ObjValue) != numVeh)
-                    {
-                        Misc.errOut("Vehicle number extracted does not comply with cplex vehicle number!");
+                        if (Convert.ToInt32(cplex.ObjValue) != numVeh)
+                        {
+                            Misc.errOut("Vehicle number extracted does not match with cplex vehicle number!");
+                        }
+                        //Check the solution according to CPLEX variables
+                        checkCplexSolution(x, this.md, numVeh, false);
+                        //Transfrom the cplex array X to get the instance of solution
+                        bestFindPrim = getSolutionFromCplex(x);
+                        //Record vehicle number
+                        this.minVehNumOptCPLEX = numVeh;
                     }
                 }
-                //Record status and the vehicle number
-                this.statusVehMin = cplex.GetStatus();
-                this.minVehNumOptCPLEX = numVeh;
+                //End cplex instance
                 cplex.End();
             }
             catch (ILOG.Concert.Exception e)
             {
-                Misc.errOut("Concert exception '" + e.Message + "' caught");
+                Misc.errOut("Error when minimizing number of vehicles! Concert exception '" + e.Message + "' caught");
             }
         }
 
+        //Method for sescondary objective
         public void performeSecObjectiveMin(BasicModel bm, int numVehicles)
         {
             Console.WriteLine("Performing secondary objective minimization!");
 
-            //Add rows in basic model that limit the number of used vehicles (as we known the feasibl/optimal one from previus minimization)
+            //Add rows in basic model that limit the number of used vehicles (as we known the feasible/optimal or set ones from previus minimization/confgi file)
             // for leaving arcs from a depot
             //tex: $\sum_{k \in K} \sum_{j \in V \cup F'}x_{0j}^k=numVehicles$ 
             double[] row = new double[md.numVars];
@@ -913,7 +919,7 @@ namespace CPLEX_TDTSPTW
             bm.eqType.Add("equal");
 
             //Add rows in basic model that limit the number of used vehicles (as we known the feasibl/optimal one from previus minimization)
-            // for entry arcs into a ending depot instances - i think this is actually not necesarry but not sure
+            // for entry arcs into a ending depot instances - I think this is actually not necesarry but not sure
             //tex: $\sum_{k \in K} \sum_{i \in V \cup F'} \sum_{j \in MED}x_{ij}^k=numVehicles$ 
             double[] row2 = new double[md.numVars];
             for (int k = 0; k < md.kBuckets; k++)
@@ -949,13 +955,13 @@ namespace CPLEX_TDTSPTW
 
                 //Create primary object function: vehicle number minimization
                 //Distance
-                //tex: $\sum_{k \in K}\sum_{i \in V_0 \cup F'}  \sum_{j \in V_{N+1} \cup F'}x_{ij}^kd_{ij}^k$
+                //tex: $\sum_{k \in K}\sum_{i \in V_0 \cup F'}  \sum_{j \in V_{ED} \cup F'}x_{ij}^kd_{ij}^k$
 
                 //Travel time
-                //tex: $\sum_{k \in K}\sum_{i \in V_0 \cup F'}  \sum_{j \in V_{N+1} \cup F'}t_{ij}^k \Theta_{ij}^k +x_{ij}^k \mu_{ij}^k$
+                //tex: $\sum_{k \in K}\sum_{i \in V_0 \cup F'}  \sum_{j \in V_{ED} \cup F'}\zeta_{ij}^k \Theta_{ij}^k +x_{ij}^k \mu_{ij}^k$
 
                 //Total time - this equation should be okay in all cases
-                //tex: $\sum_{k \in K}\sum_{i \in MED} t_{i}^k$
+                //tex: $\sum_{k \in K}\sum_{i \in MED} \tau_{i}^k$
 
                 double[] objvals = new double[md.numVars];
                 for (int k = 0; k < md.kBuckets; k++)
@@ -990,7 +996,7 @@ namespace CPLEX_TDTSPTW
                 cplex.AddMinimize(cplex.ScalProd(var[0], objvals));
                 //Execution time limit
                 cplex.SetParam(Cplex.Param.TimeLimit, p.timeLimitCplex);
-                //When it was not working i tried to limit the resolution of a solver to 0.01, but did not help (it was different error=
+                //When it was not working i tried to limit the resolution of a solver to 0.01, but did not help (it was different error)
                 //I left it here as a remainder that it can be used
                 //cplex.SetParam(Cplex.Param.MIP.Tolerances.Linearization,0.00000001);
                 cplex.SetParam(Cplex.Param.MIP.Limits.TreeMemory, p.memoryLimitCplex);
@@ -999,70 +1005,73 @@ namespace CPLEX_TDTSPTW
                 {
                     //Secondary objective execution time
                     minSecObjExecutionTime = cplex.GetCplexTime() - start;
-                    double[] x = cplex.GetValues(var[0]);
-                    double[] slack = cplex.GetSlacks(rng[0]);
+                    this.statuSecObjMin = cplex.GetStatus();
                     cplex.Output().WriteLine("Secondary objective solution status = " + cplex.GetStatus());
-                    cplex.Output().WriteLine("Secondary objective solution value = " + cplex.ObjValue);
-
-                    //Check solution values
-                    checkCplexSolutionv2(x, this.md, numVehicles);
-                    //Transfrom the cplex array X to the instance of solution
-                    bestFind = getSolutionFromCplexV2(x);
-                    if (bestFind.vehicles.Count != numVehicles)
+                    //Store variabels only in solution is feasible or optimal
+                    if (this.statuSecObjMin == Cplex.Status.Feasible || this.statuSecObjMin == Cplex.Status.Optimal)
                     {
-                        Misc.errOut("How is it possible that vehicles differ in second objective minimization!");
-                    }
-
-                    if (p.minimizationType == MinimizationType.Distance)
-                    {
-                        bestFind.diffBetweenCplexAndReal = cplex.ObjValue - bestFind.solutionDist;
-                        if (Math.Abs(cplex.ObjValue - bestFind.solutionDist) > p.doublePrecision)
+                        this.minSecObjOptCPLEX = cplex.ObjValue;
+                        double[] x = cplex.GetValues(var[0]);
+                        double[] slack = cplex.GetSlacks(rng[0]);
+                        cplex.Output().WriteLine("Secondary objective solution value = " + cplex.ObjValue);
+                        //Check solution values
+                        checkCplexSolution(x, this.md, numVehicles, true);
+                        //Transfrom the cplex array X to the instance of solution
+                        bestFindSec = getSolutionFromCplex(x);
+                        //Checkers
+                        if (bestFindSec.vehicles.Count != numVehicles)
                         {
-                            Misc.errOut("Distance in the cplex solution and recovered solution do not match!");
+                            Misc.errOut("How is it possible that vehicles differ in second objective minimization!");
                         }
-                    }
-                    else if (p.minimizationType == MinimizationType.TravelTime)
-                    {
-                        bestFind.diffBetweenCplexAndReal = cplex.ObjValue - bestFind.solutionTravelTime;
-                        if (Math.Abs(cplex.ObjValue - bestFind.solutionTravelTime) > p.doublePrecision)
+                        if (p.minimizationType == MinimizationType.Distance)
                         {
-                            Misc.errOut("Travel time in the cplex solution and recovered solution do not match!");
+                            bestFindSec.diffBetweenCplexAndReal = cplex.ObjValue - bestFindSec.solutionDist;
+                            if (Math.Abs(cplex.ObjValue - bestFindSec.solutionDist) > p.doublePrecision)
+                            {
+                                Misc.errOut("Distance in the cplex solution and recovered solution do not match!");
+                            }
                         }
-                    }
-                    else if (p.minimizationType == MinimizationType.TotalTime)
-                    {
-                        bestFind.diffBetweenCplexAndReal = cplex.ObjValue - bestFind.solutionTotalTime;
-                        if (Math.Abs(cplex.ObjValue - bestFind.solutionTotalTime) > p.doublePrecision)
+                        else if (p.minimizationType == MinimizationType.TravelTime)
                         {
-                            Misc.errOut("Total time in the cplex solution and recovered solution do not match!");
+                            bestFindSec.diffBetweenCplexAndReal = cplex.ObjValue - bestFindSec.solutionTravelTime;
+                            if (Math.Abs(cplex.ObjValue - bestFindSec.solutionTravelTime) > p.doublePrecision)
+                            {
+                                Misc.errOut("Travel time in the cplex solution and recovered solution do not match!");
+                            }
                         }
+                        else if (p.minimizationType == MinimizationType.TotalTime)
+                        {
+                            bestFindSec.diffBetweenCplexAndReal = cplex.ObjValue - bestFindSec.solutionTotalTime;
+                            if (Math.Abs(cplex.ObjValue - bestFindSec.solutionTotalTime) > p.doublePrecision)
+                            {
+                                Misc.errOut("Total time in the cplex solution and recovered solution do not match!");
+                            }
+                        }
+                        else
+                        {
+                            Misc.errOut("Unknown secondary objective function!");
+                        }
+                        //Write solution valuse into the console
+                        Console.WriteLine("Num vehicles:" + bestFindSec.vehicles.Count);
+                        Console.WriteLine("Distance traveled:" + bestFindSec.solutionDist);
+                        Console.WriteLine("Travel time:" + bestFindSec.solutionTravelTime);
+                        Console.WriteLine("Energy consumed:" + bestFindSec.solutionDist);
+                        Console.WriteLine("Total time:" + bestFindSec.solutionTotalTime);
                     }
                     else
                     {
-                        Misc.errOut("Unknown secondary objective function!");
+                        Console.WriteLine("Unable to find feasible solution!");
                     }
-
-                    Console.WriteLine("Num vehicles:" + bestFind.vehicles.Count);
-                    Console.WriteLine("Distance traveled:" + bestFind.solutionDist);
-                    Console.WriteLine("Travel time:" + bestFind.solutionTravelTime);
-                    Console.WriteLine("Energy consumed:" + bestFind.solutionDist);
-                    Console.WriteLine("Total time:" + bestFind.solutionTotalTime);
-
                 }
-                else
-                {
-                    Console.WriteLine("Unable to find feasible solution!");
-                }
-                this.statuSecObjMin = cplex.GetStatus();
-                this.minSecObjOptCPLEX = cplex.ObjValue;
                 cplex.End();
             }
             catch (ILOG.Concert.Exception e)
             {
-                Misc.errOut("Concert exception '" + e + "' caught");
+                Misc.errOut("Error when minimizing secondary objective! Concert exception '" + e + "' caught");
             }
         }
 
+        //Method to get solution details as  string
         public string getSolutionDetails(Solution s)
         {
             string d = ";";
@@ -1085,10 +1094,10 @@ namespace CPLEX_TDTSPTW
         }
 
         /*
-         * This function check wheter the solution returned from cplex is really correct
+         * This function checks wheter the solution returned from cplex is really correct
          * (this is actually selfcheck to see if my model is correct)
          */
-        public void checkCplexSolutionv2(double[] x, MILPData md, int numVehs)
+        public void checkCplexSolution(double[] x, MILPData md, int numVehs, bool second)
         {
             int numInputArcsEndDepots = 0;
             foreach (UserMILP um in md.getV0Nm_())
@@ -1116,7 +1125,6 @@ namespace CPLEX_TDTSPTW
                         numInto++;
                     }
                 }
-
                 //For starting depot the number of exits arcs has to be equal tu the number of vehicles
                 //while the number of input arcs has to be zero
                 if (um == md.depot0)
@@ -1130,7 +1138,7 @@ namespace CPLEX_TDTSPTW
                 //while the number of exit arcs has to be zero
                 else if (md.endingDepots.Contains(um))
                 {
-                    if (numExit != 0 || numInto != 1)
+                    if (numExit != 0 || (numInto != 1 && second) || (numInto > 1 && !second))
                     {
                         Misc.errOut("Arcs at arriving (last) depot do not match!");
                     }
@@ -1163,25 +1171,21 @@ namespace CPLEX_TDTSPTW
                 {
                     Misc.errOut("User " + um.u._userID + " has rest bat capacity in cplex solution lower than zero!");
                 }
-
                 //Checking rest load capacity for each user
                 double restLoadCap = x[um.restLoadVarInd];
                 if (restLoadCap < -p.doublePrecision)
                 {
                     Misc.errOut("User " + um.u._userID + " has rest load capacity in cplex solution lower than zero!");
                 }
-
                 //Checking service begin for each user
                 double beginTime = x[um.serviceStartTimeVarInd];
                 if (beginTime - um.u.etw < -p.doublePrecision || beginTime - um.u.ltw > p.doublePrecision)
                 {
                     Misc.errOut("User " + um.u._userID + " in cplex solution does not satisfy time windows!");
                 }
-
                 //Checking departure time for each user excpet ending depot which actually does not have a departure time
                 if (!md.endingDepots.Contains(um))
                 {
-
                     int count = 0;
                     double departureTime = 0;
                     foreach (KeyValuePair<(UserMILP, UserMILP, int), int> pair in md.Tijk)
@@ -1198,7 +1202,7 @@ namespace CPLEX_TDTSPTW
                     }
                     //If departure time is used for a user is used multiple times
                     // this would mean that he starts several times, and this was a big question
-                    // did i model this part okay or not, as it has to be used only once per user (in all time periods)
+                    // did i model this part okay or not, as it has to be used only once per user (in all time periods)                    
                     if (count > 1)
                     {
                         Misc.errOut("Departure time variable is used multiple times!");
@@ -1246,9 +1250,8 @@ namespace CPLEX_TDTSPTW
             }
         }
 
-        /*Returns instance of solution extracted from cplex solution array x=A^{-1}b
-         */
-        private Solution getSolutionFromCplexV2(double[] x)
+        /*Returns instance of solution extracted from cplex solution array x=A^{-1}b*/
+        private Solution getSolutionFromCplex(double[] x)
         {
             //Create instance of solution
             Solution s = new Solution(p);
@@ -1265,7 +1268,7 @@ namespace CPLEX_TDTSPTW
                     UserMILP uj = pair.Key.Item2;
                     while (true)
                     {
-                        //If ending depot is found, close vehicle and update all the values
+                        //If ending depot is found, close vehicle and update all the vehicle and solotion values
                         if (md.endingDepots.Contains(uj))
                         {
                             v.AddDepotToEnd();
@@ -1277,28 +1280,19 @@ namespace CPLEX_TDTSPTW
                         {
                             v.route.Add(uj.u);
                             v.updateVehicle();
-                            //UserMILP ui = uj;
 
+                            //Check begin times
                             double beginTimeCplex = x[uj.serviceStartTimeVarInd];
                             if (!Misc.EqualDoubleValues(beginTimeCplex, uj.u.beginTime, p.doublePrecision))
                             {
                                 Misc.errOut("Begin times do not coincide!");
                             }
-
-                            //Console.WriteLine("Computed begin time:"+uj.u.beginTime);
-                            //Console.WriteLine("Cplex begin time:" + beginTime);
-
+                            //Check rest battery capacity
                             double restBatCap = x[uj.restEnergyVarInd];
-                            //Console.WriteLine("Computed rest bat cap:" + uj.u.restBatCapAtArrival);
-                            //Console.WriteLine("Cplex rest bat cap:" + restBatCap);
-
                             if (!Misc.EqualDoubleValues(restBatCap, uj.u.restBatCapAtArrival, p.doublePrecision))
                             {
                                 Misc.errOut("Rest bat capacity at arrival do not coincide!");
                             }
-
-                            //Console.WriteLine("Computed departure time:" + uj.u.departureTime);
-
                             //Checking departure time for each user excpet ending depot which actually does not have a departure time
                             if (!md.endingDepots.Contains(uj))
                             {
@@ -1320,8 +1314,6 @@ namespace CPLEX_TDTSPTW
                                     Misc.errOut("Departure time variable is used multiple times!");
                                 }
                                 //For customer the departure time has to be equal to begintime+serviceTim
-                                //Console.WriteLine("Cplex departure time:" + departureTime);
-
                                 if (!Misc.EqualDoubleValues(departureTimeCplex, uj.u.departureTime, p.doublePrecision))
                                 {
                                     Misc.errOut("Departure times do not coincide!");

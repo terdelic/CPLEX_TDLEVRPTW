@@ -1,8 +1,7 @@
-﻿// See https://aka.ms/new-console-template for more information
-using CPLEX_TDTSPTW;
+﻿using CPLEX_TDTSPTW;
 using System.Globalization;
 
-//Culture is included to get the directory where Config and data is placed
+//Culture is included to get the directory where config and data is located
 CultureInfo ci = new CultureInfo("hr-HR");
 Thread.CurrentThread.CurrentCulture = ci;
 Thread.CurrentThread.CurrentUICulture = ci;
@@ -15,14 +14,14 @@ if (ind != -1)
 
 //Path to config and data directory that contains all the input data
 string pathCFG = mainDir + "\\Config and data\\";
-Params p = new Params(mainDir, pathCFG + "cfg.txt");
+Params p = new Params(pathCFG + "cfg.txt");
 
 //Stream for output file
 StreamWriter ofsFinal = new StreamWriter(p.outputFileName + "_" + p.minimizationType.ToString() + "_" + p.travelTimeCompType + ".txt");
 
-//Stream for input file containing all small instances and set  values (schneider 2014)
+//Stream for input file containing all small instances and values from Schneider (2014)
 StreamReader ifs = new StreamReader(pathCFG + p.instancesFile);
-//Delimited
+//Delimiter
 string d = ";";
 //Header in output line
 string headerLine = "INSATNCE_NAME" + d + "NUM_CUST" + d + "SCHNEIDER_VEH" + d + "SCHNEIDER_DIST" + d + "BETA" + d +
@@ -33,6 +32,7 @@ ofsFinal.Write(headerLine);
 
 while (!ifs.EndOfStream)
 {
+    //Parse one line from small instance file
     string line = ifs.ReadLine().Replace('.', ',');
     string[] splitLine = line.Split('\t');
     string solomonName = splitLine[0].ToUpper().Trim();
@@ -71,17 +71,22 @@ while (!ifs.EndOfStream)
     }
 
     Console.WriteLine("Solving " + solomonName + "!");
-    //Set BKS values from Schneider 2014
+    //Set BKS values from Schneider (2014)
     p.BKSVehNum = Convert.ToInt32(splitLine[2].Trim());
     p.BKSCost = Convert.ToDouble(splitLine[3].Trim());
+    //Load problem instance
     p.loadInstanceSolomonEVRP(numCust, solomonName, pathCFG);
-    //EVRPTWFR_solver4 sol2 = new EVRPTWFR_solver4(3, 7200, 7200, -1, p);
+    //Run solver
     Solver solver = new Solver(p);
-    //OLD_EVRPTWFR_solver solver = new OLD_EVRPTWFR_solver(p);
-    ofsFinal.Write(solver.outputLine.Replace(',', '.'));
-    ofsFinal.Flush();
-
+    ofsFinal.Write(solver.outputLine.Replace(',', '.')); //On my computer for float precision, by default a ',' is used, and I want to use '.'
+    ofsFinal.Flush(); //Flush to have the latest result written in the file, just for the case if the optimization breaks (i.e. power outage)
 }
-
+//Close streams
 ifs.Close();
 ofsFinal.Close();
+
+//Sending an email to myslef that the optimization is over
+string machineName = System.Environment.MachineName;
+Misc.SendEmail("Finished\n, Machine name=" + machineName + ", File Name=\n" + p.outputFileName + "\n, MinimizationType=" + p.minimizationType.ToString() + "\n, Travel Time Coeffs=" + p.travelTimeCompType);
+Console.WriteLine("Finished!!!");
+Console.ReadKey();

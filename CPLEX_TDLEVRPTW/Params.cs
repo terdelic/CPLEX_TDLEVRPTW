@@ -24,26 +24,24 @@ namespace CPLEX_TDTSPTW
     //Class for explicit form of linear line: y=slope*x+section
     public class LinEq
     {
-        public double slope; //Koeficijent
-        public double section; //Odsjecak
+        public double Slope; //Coefficient
+        public double Section; //Rest
     }
     /* Class Params contains all the input data */
     public partial class Params
     {
         //Variables used when reading the input data
-        public List<Tuple<string, string>> specificProblems;
-        public string instancesFile;
-        public string[] observedProblemType;
-        public string[] observedNumCust;
-
+        public List<Tuple<string, string>> specificProblems; //List of specific problems that want to be solved
+        public string instancesFile; //Path to instance files
+        public string[] observedProblemType; // Problem type that wants to be solved: R1, RC2, C1 ...
+        public string[] observedNumCust; //Number of customers: 5, 10 or 15
+        //Enum variable for sotring minimization type: Distance, Travel Time etc...
         public MinimizationType minimizationType;
-
-
+        //List for customers and CSs
         public List<Customer> customers;
         public List<Station> stations;
-        //Users list contains both customers and stations (not depot)
+        //Users list contains both customers and CSs (not depot)
         public List<User> users;
-
         //Vechile battery capacity
         public double batCap;
         //Vechile load capacity
@@ -53,7 +51,7 @@ namespace CPLEX_TDTSPTW
         //Linear refuel rate per capacity needed to be recharged
         public double refuelRate;
 
-        //DIcretizied time buckets and speed in those time buckets
+        //Discretizied time buckets and speed in those time buckets
         public double[] timeBuckets;
         private double[] speedsInTimeBuckets;
 
@@ -64,43 +62,55 @@ namespace CPLEX_TDTSPTW
         public int timeLimitCplex;
         //Memory limit for cplex
         public int memoryLimitCplex;
-        //NUmber of virtual CS in the MILP program
+        //Number of virtual CSs in the MILP program
         public int numMultiCSVert;
-        //Double precision used for comparison of real numbers
+        //Double precision used for comparison of floating point numbers
         public double doublePrecision;
         //Varible used to indicate wether the minimization of vehicles is neded or not
         public int knownVehNumberCPLEX;
 
         //Variables used when writng the output file
         public string outputFileName;
+        //Name of the problem instance
         public string instanceName;
         public string orgSolomonName;
         public string orgNumCust;
+        //Best known values for number of vehicles and cost reported by Schneider (2014) for EVRPTW
         public int BKSVehNum;
         public double BKSCost;
 
-
-        //Matrices for arc costs
+        //Matrices for arc costs: distance, travel time, energy
         private double[,,] distMat;
         private LinEq[,,] timeMat;
         private double[,,] energyMat;
+        //Matrix for storing which arcs are infeasible (as expalined in the article, time-dependent case is not needed here)
         private bool[,] infeasibleArcs;
-
+        //Minimum number of vehicles according to CVRP
         public int theoryMinNumVehicle;
-
+        //Instance of depot and CS at depot
         public User depot;
+        public Station CSAtDepot;
+        //Bool variable to see if time buckets are of equal length
+        private bool timeBucketEqual;
+        //Length of equal time bucket
+        private double timeBucketEqualLength;
 
-        public Params(string mainDir, string cfgFilePath)
+        //Constructor
+        public Params(string cfgFilePath)
         {
             //Load part of params from cfg.txt file
             try
             {
                 StreamReader ifs = new StreamReader(cfgFilePath);
+                //File conatining the list of all instances to be solved
                 instancesFile = ifs.ReadLine().Split(':')[1].Trim();
+                //Name of the output file
                 outputFileName = ifs.ReadLine().Split(':')[1].Trim();
+                //Type of minimization
                 string strMinimizationType = ifs.ReadLine().Split(':')[1].Trim();
                 minimizationType = GetMinimizationType(strMinimizationType);
-                //If there is anyting written in the line specific problems, than parse it and solve only this instance
+                //If there is anyting written in the line specific problems, than parse them, add them to list specificProblems
+                //and solve only this instances
                 //Example: Specific problem instance:  C101-10
                 string[] specProblems = (ifs.ReadLine().Split(':')[1].Trim()).Split(',');
                 specificProblems = new List<Tuple<string, string>>();
@@ -113,7 +123,7 @@ namespace CPLEX_TDTSPTW
                     string[] split = specProblem.Split('-');
                     specificProblems.Add(new Tuple<string, string>(split[0].Trim(), split[1].Trim()));
                 }
-                //If there are no specific problem load observed number of customers and instance types
+                //If there are no specific problems, load observed number of customers and instance types
                 //Example:
                 //Observe problem type: C1,R1
                 //Number of customers: 5,10
@@ -124,14 +134,22 @@ namespace CPLEX_TDTSPTW
                 }
                 else
                 {
+                    //Skip these two line if there are some specific problems loaded
                     ifs.ReadLine();
                     ifs.ReadLine();
                 }
+                //Figliozzi travel time coefficients
                 travelTimeCompType = ifs.ReadLine().Split(':')[1].Trim();
+                //Time limit for CPLEX
                 timeLimitCplex = Convert.ToInt32(ifs.ReadLine().Split(':')[1].Trim());
+                //Number of replication of CSs
                 numMultiCSVert = Convert.ToInt32(ifs.ReadLine().Split(':')[1].Trim());
+                //Floating point precision
                 doublePrecision = Convert.ToDouble(ifs.ReadLine().Split(':')[1].Trim());
+                //If knownVehNumberCPLEX is -1, the vehicle number minimization is performed, otherwise it is skipped and
+                // secondary objective with knownVehNumberCPLEX vehicles is solved
                 knownVehNumberCPLEX = Convert.ToInt32(ifs.ReadLine().Split(':')[1].Trim());
+                //Memory limit for CPLEX in MB
                 memoryLimitCplex = Convert.ToInt32(ifs.ReadLine().Split(':')[1].Trim());
                 ifs.Close();
             }
@@ -160,11 +178,12 @@ namespace CPLEX_TDTSPTW
             }
         }
 
+        //Method returns true if arc u1->u2 is infeasible
         public bool infeas(User u1, User u2)
         {
             return this.infeasibleArcs[u1._userID, u2._userID];
         }
-
+        //Method returns Eucledian distance for arc u1->u2
         public double EucledianDistance(User u1, User u2)
         {
             if (u1 == u2)
@@ -175,9 +194,10 @@ namespace CPLEX_TDTSPTW
             return value;
         }
 
-        //Loading specific params for selected instances
+        //Loading specific instance params for selected instances
         public void loadInstanceSolomonEVRP(string numCust, string instanceNameArg, string dirConfData)
         {
+            //Create path to instance file
             orgNumCust = numCust;
             orgSolomonName = instanceNameArg;
             instanceName = instanceNameArg + "C" + numCust;
@@ -188,21 +208,25 @@ namespace CPLEX_TDTSPTW
             {
                 StreamReader ifs = new StreamReader(instancePath);
                 ifs.ReadLine(); //Skip HEADER
+                //Initilaize lists
                 users = new List<User>();
                 customers = new List<Customer>();
                 stations = new List<Station>();
 
                 string[] splitLine;
                 string line;
+                //Varibale for sum of all demands
                 double sumDemand = 0;
                 while (true)
                 {
                     line = ifs.ReadLine().Trim().Replace('.', ',');
                     splitLine = line.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    //If there are no more lines, stop
                     if (splitLine.Length < 2)
                     {
                         break;
                     }
+                    //Get the user atrributes
                     string name = splitLine[0];
                     string type = splitLine[1];
                     double x = Convert.ToDouble(splitLine[2]);
@@ -211,8 +235,9 @@ namespace CPLEX_TDTSPTW
                     double etw = Convert.ToDouble(splitLine[5]);
                     double ltw = Convert.ToDouble(splitLine[6]);
                     double stw = Convert.ToDouble(splitLine[7]);
-
+                    //Increase demand
                     sumDemand += demand;
+                    //depending on the user type, create an appropriate instance
                     if (type == "d")
                     {
                         Customer c = new Customer(users.Count, customers.Count, x, y, demand, etw, ltw, stw, this);
@@ -225,6 +250,10 @@ namespace CPLEX_TDTSPTW
                         Station s = new Station(users.Count, stations.Count, x, y, etw, ltw, stw, this);
                         users.Add(s);
                         stations.Add(s);
+                        if (Misc.EqualDoubleValues(depot.x, x, doublePrecision) && Misc.EqualDoubleValues(depot.y, y, doublePrecision))
+                        {
+                            CSAtDepot = s;
+                        }
                     }
                     else if (type == "c")
                     {
@@ -237,17 +266,21 @@ namespace CPLEX_TDTSPTW
                         Misc.errOut("Uknow user type!");
                     }
                 }
+                //Load battery capacity for problem
                 splitLine = ifs.ReadLine().Trim().Replace('.', ',').Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 batCap = Convert.ToDouble(splitLine[splitLine.Length - 1].Replace('/', ' ').Trim());
+                //Load load (cargo) capacity for problem
                 splitLine = ifs.ReadLine().Trim().Replace('.', ',').Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 loadCap = Convert.ToDouble(splitLine[splitLine.Length - 1].Replace('/', ' ').Trim());
+                //Load consumption rate for problem
                 splitLine = ifs.ReadLine().Trim().Replace('.', ',').Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 consRate = Convert.ToDouble(splitLine[splitLine.Length - 1].Replace('/', ' ').Trim());
+                //Load refuel rate for problem
                 splitLine = ifs.ReadLine().Trim().Replace('.', ',').Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                 refuelRate = Convert.ToDouble(splitLine[splitLine.Length - 1].Replace('/', ' ').Trim());
                 ifs.Close();
 
-                //Teoretski minimalan broj vozila kao da je CVRP
+                //Theory minimum number of vehicles in CVRP
                 theoryMinNumVehicle = Convert.ToInt32(Math.Ceiling(sumDemand / loadCap));
             }
             catch (Exception ex)
@@ -255,19 +288,34 @@ namespace CPLEX_TDTSPTW
                 Misc.errOut(ex.Message);
             }
 
-            //Load speeds and travel times
+            //Load speeds and travel times from Filiozzi files
             try
             {
+                //Open stream to Figliozzi file
                 StreamReader ifsFig = new StreamReader(dirConfData + "FigllioziCoeffs.txt");
                 ifsFig.ReadLine(); //HEADER
                 ifsFig.ReadLine(); //HEADER
                 string line = ifsFig.ReadLine().Trim().Replace('.', ',');
                 string[] splitLine = line.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+                //Load time buckets discrete time points
                 timeBuckets = new double[splitLine.Length];
+                timeBucketEqual = true;
+                double previousTB = 0;
+                double previousDiffTB = 0;
                 for (int i = 0; i < splitLine.Length; i++)
                 {
                     timeBuckets[i] = Convert.ToDouble(splitLine[i]) * this.depot.ltw;
+                    timeBucketEqualLength = timeBuckets[i] - previousTB;
+                    if (timeBucketEqual &&
+                        !Misc.EqualDoubleValues(previousTB, 0, doublePrecision) &&
+                        !Misc.EqualDoubleValues(timeBucketEqualLength, previousDiffTB, doublePrecision))
+                    {
+                        timeBucketEqual = false;
+                    }
+                    previousTB = timeBuckets[i];
+                    previousDiffTB = timeBucketEqualLength;
                 }
+                //Find speed coeffs in time buckets for loaded travel tiem type, i.e. A1 
                 while (!ifsFig.EndOfStream)
                 {
                     line = ifsFig.ReadLine().Trim();
@@ -299,71 +347,86 @@ namespace CPLEX_TDTSPTW
             setInfeasibleArcs();
         }
 
+        //Method to get the time bucket k interval for set time value
         public int getTimeIntervalIndex(double timeParam)
         {
-            //if (timeParam- depot.etw <-doublePrecision || timeParam - timeBuckets[timeBuckets.Length - 1]>doublePrecision)
-            //{
-            //    Misc.errOut("Departure time is either lower than zero or greater than depot l_0!");
-            //}
-            //Ako su time bucketi varijabilne duljine trajanja morat biti s petljom, inace ne treba
-            //Moze se i pametnijom izvedbom (strukturom) spremiti da bude brže, ali ovdje nije potrebno
-            for (int k = 0; k < timeBuckets.Length; k++)
+            //If time buckest are of equal length than the faster way can be used to obtain the time bucket index, otherwise the loop is used
+            if (timeBucketEqual)
             {
-                if (timeParam - timeBuckets[k] < 0) //prije je bilo double precision, ali je u nekom trenu bacilo grešku na distance
+                int k = Convert.ToInt32(Math.Floor(timeParam / timeBucketEqualLength));
+                if (k < 0)
+                {
+                    return 0;
+                }
+                else if (k > timeBuckets.Length - 1)
+                {
+                    return timeBuckets.Length - 1;
+                }
+                else
                 {
                     return k;
                 }
             }
-            return timeBuckets.Length - 1;
+            else
+            {
+                for (int k = 0; k < timeBuckets.Length; k++)
+                {
+                    if (timeParam - timeBuckets[k] < 0) //Has to be lower than zero (throws an error on distance check when doublePRecision is used)
+                    {
+                        return k;
+                    }
+                }
+                return timeBuckets.Length - 1;
+            }
         }
 
-        //Function to get distance between users in specific time period k
+        //Function to get distance of an arc u1->u2 in specific time period k
         public double dist(User u1, User u2, int k)
         {
             return distMat[u1._userID, u2._userID, k];
         }
 
-        //Function to get distance between users depending on the departure time
+        //Function to get distance of an arc u1->u2  depending on the departure time
         public double dist(User u1, User u2, double departureTimeU1)
         {
             int k = getTimeIntervalIndex(departureTimeU1);
             return distMat[u1._userID, u2._userID, k];
         }
 
-        //Function to get linear time between users depending on the departure time
+        //Function to get linear time of an arc u1->u2  depending on the departure time
         public double LinTime(User u1, User u2, double departureTimeU1)
         {
             int k = getTimeIntervalIndex(departureTimeU1);
             LinEq eq = timeMat[u1._userID, u2._userID, k];
-            return eq.slope * departureTimeU1 + eq.section;
+            return eq.Slope * departureTimeU1 + eq.Section;
         }
 
-        //Function to get slope of linear time between user in specific time period k
-        public double getSlopeFromLinTime(User u1, User u2,int k)
+        //Function to get slope of linear time of an arc u1->u2  in specific time period k
+        public double getSlopeFromLinTime(User u1, User u2, int k)
         {
-            return timeMat[u1._userID, u2._userID, k].slope;
+            return timeMat[u1._userID, u2._userID, k].Slope;
         }
 
-        //Function to get section of linear time between user in specific time period k
+        //Function to get section of linear time of an arc u1->u2 in specific time period k
         public double getSectionFromLinTime(User u1, User u2, int k)
         {
-            return timeMat[u1._userID, u2._userID, k].section;
+            return timeMat[u1._userID, u2._userID, k].Section;
         }
 
-        //Function to get energy between users depending on the departure time
+        //Function to get energyof an arc u1->u2  depending on the departure time
         public double ener(User u1, User u2, double departureTimeU1)
         {
             int k = this.getTimeIntervalIndex(departureTimeU1);
             return this.energyMat[u1._userID, u2._userID, k];
         }
 
-        //Function to get energy between users depending on the time period k
+        //Function to get energy of an arc u1->u2  depending on the time period k
         public double ener(User u1, User u2, int k)
         {
             return this.energyMat[u1._userID, u2._userID, k];
         }
 
-        //Figliozzi travel time function (look in the article TDVRP 2012)
+        //Figliozzi travel time function (look in the article) -- assumes that distance does not change in time buckets
         public double FigTime(User u1, User u2, double departureTimeU1)
         {
             //Get the current index of time period
@@ -409,22 +472,25 @@ namespace CPLEX_TDTSPTW
             }
             double slope = (tt2 - tt1) / (dt2 - dt1);
             //This is the resolution problem, for example
-            // when all speed coeffs are 1, the travel time is constant function and should be zero
-            // but due to he double resolution it is not
+            // when all speed coeffs are 1, the travel time is constant function and should be zero but due to he double resolution it is not
             if (Math.Abs(slope) < doublePrecision)
             {
                 slope = 0;
             }
             double section = tt1 - slope * dt1;
-            return new LinEq() { section = section, slope = slope };
+            return new LinEq() { Section = section, Slope = slope };
         }
 
+        //Generate time, distance and energy matrices
         public void generateMatrix()
         {
             //3-D matrices for distances, travel time and energy 
             distMat = new Double[users.Count, users.Count, timeBuckets.Length];
             timeMat = new LinEq[users.Count, users.Count, timeBuckets.Length];
             energyMat = new double[users.Count, users.Count, timeBuckets.Length];
+            //The commented code was used to plot figure in the article -> will be removed
+            //StreamWriter sw = new StreamWriter("travelTime.txt");
+            //StreamWriter desc = new StreamWriter("desc.txt");
             for (int i = 0; i < users.Count; i++)
             {
                 for (int j = 0; j < users.Count; j++)
@@ -456,32 +522,63 @@ namespace CPLEX_TDTSPTW
                             //Update start departure time
                             startDepartureTime = timeBuckets[k];
                         }
+
+                        //double startTime = depot.etw;
+                        //double resolution = 0.1;
+                        //double currentTime = startTime;
+                        //string line1 = "", line2 = "", line3 = "",line4="", line5="("+i+"->"+j+")";
+                        //while (currentTime <= depot.ltw)
+                        //{
+                        //    double FTime = FigTime(userI, userJ, currentTime);
+
+                        //    line1+=currentTime;
+                        //    line2 += FTime;
+                        //    line3 += TimeUnformSpeed(userI,userJ,currentTime);
+                        //    line4+=LinTime(userI, userJ, currentTime);
+
+
+                        //    if (currentTime < depot.ltw)
+                        //    {
+                        //        line1 += ";";
+                        //        line2 += ";";
+                        //        line3 += ";";
+                        //        line4 += ";";
+
+                        //    }
+                        //    currentTime += resolution;
+                        //}
+                        //sw.WriteLine(line1.Replace(',','.'));
+                        //sw.WriteLine(line2.Replace(',', '.'));
+                        //sw.WriteLine(line3.Replace(',', '.'));
+                        //sw.WriteLine(line4.Replace(',', '.'));
                     }
                 }
             }
+            //sw.Close();
         }
 
         /*
-         * This function returns the lower and upper dicretizied time values (as a double tuple) for specific time period k 
+         * This function returns the lower and upper dicretizied time point values (as a double tuple) for specific time period k 
          */
-        public Tuple<double,double> getBoundaries(int k)
+        public Tuple<double, double> getBoundaries(int k)
         {
             Tuple<double, double> t;
-            if(k<0 || k >= timeBuckets.Length)
+            if (k < 0 || k >= timeBuckets.Length)
             {
                 Misc.errOut("Wrong k value!");
             }
             if (k == 0)
             {
-                t= new Tuple<double, double>(depot.etw,timeBuckets[k]);
+                t = new Tuple<double, double>(depot.etw, timeBuckets[k]);
             }
             else
             {
-                t = new Tuple<double, double>(timeBuckets[k-1], timeBuckets[k]);
+                t = new Tuple<double, double>(timeBuckets[k - 1], timeBuckets[k]);
             }
             return t;
         }
 
+        //Method to set infeasible arcs
         private void setInfeasibleArcs()
         {
             //All arcs are in the begining feasible: false means feasible, true infeasible
@@ -500,35 +597,34 @@ namespace CPLEX_TDTSPTW
                     /*IMPORTANT - CAREFUL
                      * This is related only to the benchamrk instance and
                     have to be very careful with that - as user with ID =1 is CS located at the depot
-                    there is no point in going from depto to that CS (the same goes in the other way around)
+                    there is no point in going from depot to that CS (the same goes in the other way around)
                     */
-                    if (userI.isDepot && userJ._userID == 1)
+                    if (CSAtDepot != null && userI.isDepot && userJ == CSAtDepot)
                     {
                         infeasibleArcs[i, j] = true;
                         continue;
                     }
-                    if (userJ.isDepot && userI._userID == 1)
+                    if (CSAtDepot != null && userJ.isDepot && userI == CSAtDepot)
                     {
                         infeasibleArcs[i, j] = true;
                         continue;
                     }
                     //Capacity violation - does not depend on time bucket k
-                    //tex:$q_i+q_j > C \wedge i \in V_0 \cup F', j \in V_{N+1} \cup F'$
+                    //tex:$q_i+q_j > C \wedge i \in V_0 \cup F', j \in V_{ED} \cup F'$
                     if (userI.demand + userJ.demand - loadCap > doublePrecision)
                     {
                         infeasibleArcs[i, j] = true;
                         continue;
                     }
                     //time window violation - does not depend on the time bucket k
-                    //tex: $e_i+s_i+t_{ij}>l_j\wedge i \in V_0 \cup F', j \in V_{N+1} \cup F'$
+                    //tex: $e_i+s_i+t_{ij}^k>l_j\wedge i \in V_0 \cup F', j \in V \cup F'$
                     if (userI.etw + userI.serviceTime + LinTime(userI, userJ, userI.etw + userI.serviceTime) - userJ.ltw > doublePrecision)
                     {
                         infeasibleArcs[i, j] = true;
                         continue;
                     }
-
-                    ////Depot late time windows -does not depend on the time bucket k
-                    //tex:  $max(t_i+s_i+t_{ij},e_j)+s_j+t_{jN+1}>l_0 \wedge i \in V_0 \cup F', j \in V \cup F'$
+                    ////Depot late time windows - does not depend on the time bucket k
+                    //tex:  $max(e_i+s_i+t_{ij}^k,e_j)+s_j+t_{j,N+1}^k>l_0 \wedge i \in V_0 \cup F', j \in V \cup F'$
                     if (!(userJ.isDepot))
                     {
                         double beginTimeAtUserJ = userI.compBeginTm(userI, userJ, userI.etw, userI.serviceTime);
@@ -540,44 +636,64 @@ namespace CPLEX_TDTSPTW
                             continue;
                         }
                     }
-
                     // Violation of battery capacity - Sciffer LRPIF 2018
                     // Currently, the energy does not changes dependent on the time period k,
-                    //but if will change this needs to be updated
+                    // but we still check if in any of the time windows k the energy is feasible, we say it is feaasible in all
                     //
-                    //tex:  $e_{ij}>Q \wedge i \in V_0 \cup F', j \in V \cup F'$
-
-                    if (ener(userI, userJ, 0) - batCap > doublePrecision)
+                    //tex:  $e_{ij}^k>Q \wedge i \in V_0 \cup F', j \in V_{ED} \cup F'$
+                    bool infeasibleEnergy = true;
+                    double departTime = 0;
+                    for (int k = 0; k < timeBuckets.Length; k++)
                     {
-
+                        if (batCap - ener(userI, userJ, departTime) > doublePrecision)
+                        {
+                            infeasibleEnergy = false;
+                            break;
+                        }
+                        departTime = timeBuckets[k];
+                    }
+                    if (infeasibleEnergy)
+                    {
                         infeasibleArcs[i, j] = true;
                         continue;
                     }
                     /*
-                     * Schiffer did not use this, only Shneider 2014
-                     * IF vechile foes from user I to user J, and imidiately before I it visits the CS, and also imidiately after J
-                     * also visits a CS, and there is no combination of CSs that make this feasible, then the arc is infeasible                    */
+                     * If vechile goes from user I to user J, and imidiately before I it visits the CS, and also imidiately after J
+                     * also visits a CS, and there is no combination of CSs that make this feasible, then the arc is infeasible 
+                     * We scale that, as in previous case, that in all time bucetks the energy has to be infeaasible for arc to be infeasbile
+                    
+                     */
                     if (!(userI.isDepot) && !(userJ.isDepot) && !(userI.isStation()) && !(userJ.isStation()))
                     {
-                        bool assumeEnergeyFeas = false;
-                        List<User> pomStations = new List<User>(stations);
-                        for (int IS = 0; IS < stations.Count(); IS++) { 
-                            for (int JS = 0; JS < stations.Count(); JS++)
+                        departTime = 0;
+                        infeasibleEnergy = true;
+                        for (int k = 0; k < timeBuckets.Length; k++)
+                        {
+                            List<User> pomStations = new List<User>(stations);
+                            for (int IS = 0; IS < stations.Count(); IS++)
                             {
-                                User stI = stations[IS];
-                                User stJ = stations[JS];
-                                if (ener(stI, userI, 0) + ener(userI, userJ, 0) + ener(userJ, stJ, 0) <= batCap)
+                                for (int JS = 0; JS < stations.Count(); JS++)
                                 {
-                                    assumeEnergeyFeas = true;
+                                    User stI = stations[IS];
+                                    User stJ = stations[JS];
+                                    if (ener(stI, userI, departTime) + ener(userI, userJ, departTime) + ener(userJ, stJ, departTime) <= batCap)
+                                    {
+                                        infeasibleEnergy = false;
+                                        break;
+                                    }
+                                }
+                                if (infeasibleEnergy == false)
+                                {
                                     break;
                                 }
                             }
-                            if (assumeEnergeyFeas == true)
+                            if (infeasibleEnergy == false)
                             {
                                 break;
                             }
+                            departTime = timeBuckets[k];
                         }
-                        if (assumeEnergeyFeas == false)
+                        if (infeasibleEnergy == true)
                         {
                             infeasibleArcs[i, j] = true;
                             continue;
@@ -588,3 +704,4 @@ namespace CPLEX_TDTSPTW
         }
     }
 }
+

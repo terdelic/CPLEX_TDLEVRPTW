@@ -6,8 +6,10 @@ using System.Threading.Tasks;
 
 namespace CPLEX_TDTSPTW
 {
+    //Class for storing user (Customer, CS) attributes
     public class User
     {
+        //Attributes
         public int _userID;
         public double x;
         public double y;
@@ -15,18 +17,11 @@ namespace CPLEX_TDTSPTW
         public double etw;
         public double ltw;
         public double serviceTime;
-
-        //public double rechargeTime;
         public UserType type;
         public bool isDepot;
         public Params p;
-
-
-        //public Vehicle vehicle;
         public int vehicleID;
-
         public int posInRoute;
-
         public double departureTime;
         public double arrivalDistance;
         public double arrivalTime;
@@ -35,9 +30,7 @@ namespace CPLEX_TDTSPTW
         public double restBatCapAtArrival;
         public double restBatCapAtDeparture;
         public double energyConsumed;
-
-
-
+        //Constructor
         public User(int id, double x, double y, double demand, double etw, double ltw, double stw, UserType type, Params p)
         {
             this._userID = id;
@@ -49,18 +42,14 @@ namespace CPLEX_TDTSPTW
             this.serviceTime = stw;
             this.type = type;
             this.p = p;
-
             this.isDepot = false;
             resetUserValues();
         }
-
-
+        //Reset values
         public virtual void resetUserValues()
         {
-            //vehicle = null;
             vehicleID = -1;
             posInRoute = -1;
-
             departureTime = this.etw + this.serviceTime;
             arrivalDistance = 0;
             arrivalTime = 0;
@@ -69,9 +58,8 @@ namespace CPLEX_TDTSPTW
             restBatCapAtArrival = 0;
             restBatCapAtDeparture = 0;
             energyConsumed = 0;
-
         }
-
+        //Method to check if user is CS
         public bool isStation()
         {
             if (this.type == UserType.Station)
@@ -80,7 +68,7 @@ namespace CPLEX_TDTSPTW
             }
             return false;
         }
-
+        //Method to check is its depot or CS
         public bool isDepotOrStation()
         {
             if (this.type == UserType.Station || this.isDepot)

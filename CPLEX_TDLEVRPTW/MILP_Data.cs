@@ -9,7 +9,7 @@ using ILOG.CPLEX;
 
 namespace CPLEX_TDTSPTW
 {
-    /*Class only constructed for the purpose of MILP,
+    /* Class UserMILP is only constructed for the purpose of MILP,
      * that contains the user itself, but aditionaly the
      * indices of coresponding decision variables in array X
      */
@@ -20,21 +20,28 @@ namespace CPLEX_TDTSPTW
             this.u = u;
         }
         public User u;
+        //Index of decision variable for rest load capacity
         public int restLoadVarInd;
+        //Index of decision variable for rest energy capacity
         public int restEnergyVarInd;
+        //Index of decision variable for begin time of service
         public int serviceStartTimeVarInd;
     }
 
-    /* Basic model contains equations for solving Ax=b,
+    /* Basic model that contains equations for solving Ax=b,
      * with also lower and upper bounds on decision variables
      */
     public class BasicModel
     {
+        //Lower and upper bounds arrays
         public double[] lb;
         public double[] ub;
+        //Type of each decision variable (used are float and int)
         public NumVarType[] xtb;
+        //Number of decision variables in problem (the size of arrays)
         public int numVars;
 
+        //Lists for array constraints Ax=b
         public List<double[]> A;
         public List<double> b;
         //This list is used only to know if the equation is equal, lower, greater, lower or equal etc.
@@ -45,15 +52,14 @@ namespace CPLEX_TDTSPTW
             lb = new double[numVars];
             ub = new double[numVars];
             xtb = new NumVarType[numVars];
-            //Equations
+            //Constraints
             A = new List<double[]>();
             b = new List<double>();
             eqType = new List<string>();
+            //Number of variables
             this.numVars = numVars;
         }
     }
-
-
     class MILPData
     {
         //Dictionaries for arc variables
@@ -63,51 +69,63 @@ namespace CPLEX_TDTSPTW
 
         //Depots
         public UserMILP depot0;
+        //Due to track of service begin times and departure times, we have to have multiple ending depots (in time-independet case this is not needed)
         public List<UserMILP> endingDepots;
+        //Number of time buckets
         public int kBuckets;
 
+        //List of virtual CS (check the article)
         private List<UserMILP> F_;
+        //List of customers (check the article)
         private List<UserMILP> V;
         public int numVars;
 
-        /*Here go functions to get various list combinations that are used within MILP - see Schneider
-         * 
+        /*Here are methods to get various list combinations that are used within MILP - see articles
          */
+        //Get CSs
         public List<UserMILP> getF_()
         {
             return F_;
         }
+        //Get CSs with ending depots
+        public List<UserMILP> getFNm_()
+        {
+            List<UserMILP> list = new List<UserMILP>(F_);
+            list.AddRange(endingDepots);
+            return list;
+        }
+        //Get customers
         public List<UserMILP> getV()
         {
             return V;
         }
-
+        //Get ending depots
         public List<UserMILP> getMED()
         {
             return endingDepots;
         }
-
+        //Get CS with starting depot
         public List<UserMILP> getF0_()
         {
             List<UserMILP> list = new List<UserMILP>(F_);
             list.Add(depot0);
             return list;
         }
-
+        //Get customers and CSs
         public List<UserMILP> getV_()
         {
             List<UserMILP> list = new List<UserMILP>(V);
             list.AddRange(F_);
             return list;
         }
-
+        //Get customeers and starting depot
         public List<UserMILP> getV0()
         {
             List<UserMILP> list = new List<UserMILP>(V);
             list.Add(depot0);
             return list;
         }
-
+        //Get customers, starting depot and CSs
         public List<UserMILP> getV0_()
         {
             List<UserMILP> list = new List<UserMILP>(V);
@@ -115,7 +133,14 @@ namespace CPLEX_TDTSPTW
             list.Add(depot0);
             return list;
         }
-
+        //Get customers and ending depots
+        public List<UserMILP> getVNm()
+        {
+            List<UserMILP> list = new List<UserMILP>(V);
+            list.AddRange(endingDepots);
+            return list;
+        }
+        //Get customers, ending depots and CSs
         public List<UserMILP> getVNm_()
         {
             List<UserMILP> list = new List<UserMILP>(V);
@@ -123,7 +148,7 @@ namespace CPLEX_TDTSPTW
             list.AddRange(endingDepots);
             return list;
         }
-
+        //Get customers,strating depot, ending depots and CSs
         public List<UserMILP> getV0Nm_()
         {
             List<UserMILP> list = new List<UserMILP>(V);
@@ -133,28 +158,28 @@ namespace CPLEX_TDTSPTW
             return list;
         }
 
-        /*Function that returns all appropriate X indices for all arcs that exit user ui
-         */
+        //Functions belowe are used when checking the produced solution from CPLEX
+        /*Function that returns all appropriate Xijk indices for all arcs that exit user ui         */
         public List<int> getAllVarIndicesExitArcsXIJK(UserMILP ui)
         {
-            return this.Xijk.Where(x => x.Key.Item1==ui).Select(x => x.Value).ToList();
+            return this.Xijk.Where(x => x.Key.Item1 == ui).Select(x => x.Value).ToList();
         }
 
-        /*Function that returns all appropriate X indices for all arcs that exit user ui and enter user uj
+        /*Function that returns all appropriate Xijk indices for all arcs that exit user ui and enter user uj
         */
         public List<int> getAllVarIndicesExitArcsXIJK(UserMILP ui, UserMILP uj)
         {
             return this.Xijk.Where(x => x.Key.Item1 == ui && x.Key.Item2 == uj).Select(x => x.Value).ToList();
         }
 
-        /*Function that returns all appropriate X indices for all arcs that enter user ui
+        /*Function that returns all appropriate Xijk indices for all arcs that enter user ui
         */
         public List<int> getAllVarIndicesEntryArcsXIJK(UserMILP ui)
         {
             return this.Xijk.Where(x => x.Key.Item2 == ui).Select(x => x.Value).ToList();
         }
 
-        /*Function that returns all appropriate X indices for all arcs that exit user ui in variable Tijk
+        /*Function that returns all appropriate indices for all arcs that exit user ui in variable Tijk
         */
         public List<int> getAllVarIndicesExitArcsTIJK(UserMILP ui)
         {
@@ -165,16 +190,16 @@ namespace CPLEX_TDTSPTW
         /*
          * Class for storing decision variables and vertices used in MILP program
          * */
-        public MILPData(Params p,int numEndingDepots)
+        public MILPData(Params p, int numEndingDepots)
         {
             //Number of time intervals
             kBuckets = p.timeBuckets.Length;
-            //Dictionary for storinf xijk variable index within MILP
+            //Dictionary for storing xijk variable index within MILP
             Xijk = new Dictionary<(UserMILP, UserMILP, int), int>();
-            //Dictionary for storinf tijk variable index within MILP
+            //Dictionary for storing tijk variable index within MILP - this is departure time variable
             Tijk = new Dictionary<(UserMILP, UserMILP, int), int>();
-            //Dictionary for storinf Bij variable index within MILP - this variable is only used to deterime max between service begin time and early time window
-            //It is necessary only in TD cases when we want to know exact departure times
+            //Dictionary for storing Bij variable index within MILP - this variable is only used to deterime max between service begin time and early time window
+            //It is necessary only in Time-Dependent cases when we want to know EXACT departure times
             Bij = new Dictionary<(UserMILP, UserMILP), int>();
 
             //List of CSs with virtual CS replication
@@ -188,7 +213,7 @@ namespace CPLEX_TDTSPTW
             {
                 if (u.isDepot)
                 {
-                    //We have two instances of depot: 0-strating depot, N (or N+1) i ending depot
+                    //We have two instances of depot: 0-strating depot, N (or just N+1) ending depot
                     depot0 = new UserMILP(p.depot);
                     for (int i = 0; i < numEndingDepots; i++)
                     {
@@ -214,8 +239,8 @@ namespace CPLEX_TDTSPTW
 
             /*Dictionary for decision variables
              * Xijk - binary variable indicating whether the arc i,j,k is used or not
-             * Tijk - float variable indicating the departure time forim user i to user j in time priod k - to be clear only in one period k this value can be >0
-             * Bij - binary variable for choosing max between begin of service and early time window (has to be ij)
+             * Tijk - float variable indicating the departure time from user i to user j in time priod k - to be clear only in one period k this value can be larger than zero
+             * Bij - binary variable for selecting max between begin of service and early time window (has to be ij)
              * */
             int varIndex = 0;
             foreach (UserMILP uI in getV0_())
@@ -237,9 +262,8 @@ namespace CPLEX_TDTSPTW
                         Bij.Add((uI, uJ), varIndex);
                         varIndex++;
                     }
-                    }
+                }
             }
-
             /*For all vertices set decision variables
              * restLoadVarInd - rest load capacity at arrival at user i
              * restEnergyVarInd - rest energy level at ARRIVAL(!) at user I
@@ -251,7 +275,7 @@ namespace CPLEX_TDTSPTW
                 varIndex++;
                 u.restEnergyVarInd = varIndex;
                 varIndex++;
-                //Not sure if this decision variable can actually be removed??? (as we have departure time -tricky)
+                //Not sure if this decision variable can actually be removed??? (as we have departure time - tricky as it is used in other equations - lets leave it for now)
                 u.serviceStartTimeVarInd = varIndex;
                 varIndex++;
             }
@@ -259,8 +283,8 @@ namespace CPLEX_TDTSPTW
 
             /*Additional explanation
              * Basically we will have an array X that contains all of the decision variables.
-             * The length of this array will be numVars, and when we will construct an equalites for the problem
-             * we for each vertex in graph that can indicate (rest load, rest energy, or service start time) have to know
+             * The length of this array will be numVars, and when we will construct an equalites for the problem.
+             * For each vertex in graph that can indicate (rest load, rest energy, or service start time) we have to know
              * the exact index in the array X, that coresponds to the appropriate decsion variable.
              * The same goes for arcs. 
              */
