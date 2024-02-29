@@ -1,4 +1,5 @@
-﻿using CPLEX_TDTSPTW;
+﻿using CPLEX_TDLEVRPTW;
+using CPLEX_TDTSPTW;
 using System.Globalization;
 
 //Culture is included to get the directory where config and data is located
@@ -7,14 +8,18 @@ Thread.CurrentThread.CurrentCulture = ci;
 Thread.CurrentThread.CurrentUICulture = ci;
 string mainDir = Directory.GetCurrentDirectory();
 int ind = mainDir.IndexOf("bin");
+
 if (ind != -1)
 {
     mainDir = mainDir.Remove(ind - 1);
 }
 
+
+
 //Path to config and data directory that contains all the input data
 string pathCFG = mainDir + "\\Config and data\\";
 Params p = new Params(pathCFG + "cfg.txt");
+
 
 //Stream for output file
 StreamWriter ofsFinal = new StreamWriter(p.outputFileName + "_" + p.minimizationType.ToString() + "_" + p.travelTimeCompType + ".txt");

@@ -1,12 +1,12 @@
 ﻿List of instances: instancesSmall.txt
 Output File Name: solvedTDLEVRPTW
 Minimization of: TravelTime
-Specific problem instance:  C101-5
-Observe problem type: C1,R1
-Number of customers: 5
-FigliozziTravelTimeType: VRPTW
+Specific problem instance:  
+Observe problem type: all
+Number of customers: 5,10,15
+FigliozziTravelTimeType: A1
 Cplex execution time: 7200
 Multiply coeff of CS vertices in MILP (Beta): 3
-Double precision for comparison: 0,001
+Double precision for comparison: 0,0001
 KnownVehNumberCPLEX: -1
 Memory limit for cplex (MB): 6144
