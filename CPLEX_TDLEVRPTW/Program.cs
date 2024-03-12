@@ -1,5 +1,4 @@
-﻿using CPLEX_TDLEVRPTW;
-using CPLEX_TDTSPTW;
+﻿using CPLEX_TDTSPTW;
 using System.Globalization;
 
 //Culture is included to get the directory where config and data is located

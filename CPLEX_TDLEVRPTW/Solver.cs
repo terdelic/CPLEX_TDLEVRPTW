@@ -70,7 +70,6 @@ namespace CPLEX_TDTSPTW
             Console.WriteLine(descriptionLine);
 
             //Create an instance of MILP graph data: vertices, variables etc.
-            //int numEndingDepots = Convert.ToInt32(Math.Ceiling(p.theoryMinNumVehicle * 1.4));
             int numEndingDepots = 5; //value of 5 is take as maximum number of vehicles reported by Schneider 2014
             //Create an instance of MILP data
             md = new MILPData(p, numEndingDepots);
@@ -413,7 +412,7 @@ namespace CPLEX_TDTSPTW
                 bm.eqType.Add("equal");
             }
 
-            // Equation for time feasibility for arcs leaving customers and depot max fun on begin time - tau j
+            // Equation for time feasibility for arcs leaving customers and depot with max function on begin time - tau j
             //tex: $\forall i \in V_0, \forall j \in V_{ED} \cup F'~ i\neq j $ $\tau_i+s_i \sum_{k \in K}x_{ij}^k+\sum_{k \in K} (\Theta_{ij}^k \zeta_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K} x_{ij}^k) +2(l_0+gQ)b_{ij} \geq \tau_j$ 
 
             foreach (UserMILP i in md.getV0())
@@ -448,7 +447,7 @@ namespace CPLEX_TDTSPTW
                 }
             }
 
-            // Equation for time feasibility for arcs leaving customers and depot max fun on begin time - early time winow - ej
+            // Equation for time feasibility for arcs leaving customers and depot with max function on begin time - early time winow ej
             //tex: $\forall i \in V_0, \forall j \in V_{ED} \cup F'~ i\neq j $ $\tau_j \leq e_j+(1-b_j)2(l_0+gQ)+b_j(l_0+gQ) -\sum_{k \in K}x_{ij}^k(l_0+gQ)$ 
 
             foreach (UserMILP i in md.getV0())
@@ -480,7 +479,7 @@ namespace CPLEX_TDTSPTW
                 }
             }
 
-            // Equation for time feasibility for arcs leaving CSs - max fun begin time - tau_j
+            // Equation for time feasibility for arcs leaving CSs - max function begin time - tau_j
             //tex: $\forall i \in F', \forall j \in V_{ED} \cup F'~ i\neq j$ $\tau_i+g(Q-y_i)+\sum_{k \in K} (\Theta_{ij}^k \zeta_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K}x_{ij}^k)+2b_{ij}(l_0+gQ) \geq \tau_j$ 
             foreach (UserMILP i in md.getF_())
             {
@@ -514,7 +513,7 @@ namespace CPLEX_TDTSPTW
                 }
             }
 
-            // Equation for time feasibility for arcs leaving CSs - max fun begin time - etw
+            // Equation for time feasibility for arcs leaving CSs - max function begin time - etw
             //tex: $\forall i \in F', \forall j \in V_{ED} \cup F'~ i\neq j$ $\tau_j \leq e_j +2(1-b_{ij})(l_0+gQ)+b_{ij}(l_0+gQ)-\sum_{k \in K}x_{ij}^k(l_0+gQ)$ 
             foreach (UserMILP i in md.getF_())
             {
