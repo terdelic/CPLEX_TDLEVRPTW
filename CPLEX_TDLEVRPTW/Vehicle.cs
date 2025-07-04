@@ -34,6 +34,9 @@ namespace CPLEX_TDTSPTW
             Customer newDepot = new Customer((Customer)p.depot);
             newDepot.posInRoute = route.Count;
             newDepot.isDepot = true;
+            newDepot.restLoadCap = p.loadCap;
+            newDepot.restBatCapAtArrival = p.batCap;
+            newDepot.restBatCapAtDeparture = p.batCap;
             route.Add(newDepot);
             reset();
         }
@@ -126,6 +129,7 @@ namespace CPLEX_TDTSPTW
                     {
                         Misc.errOut("Punjenje duže od maksimalnog vremena!");
                     }
+                    uCurPomFor.serviceTime=timeCharge;
                     vehicleRechargingTime += timeCharge;
                     vehicleNumOfRecharges++;
                     //Reset the rest battery capacity

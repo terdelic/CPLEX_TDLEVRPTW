@@ -22,6 +22,10 @@ Params p = new Params(pathCFG + "cfg.txt");
 
 //Stream for output file
 StreamWriter ofsFinal = new StreamWriter(p.outputFileName + "_" + p.minimizationType.ToString() + "_" + p.travelTimeCompType + ".txt");
+string st = "new";
+//StreamWriter help=new StreamWriter($"VarsAnalysis_{st}.txt");
+
+//help.WriteLine($"NUM_VARS_{st}\tNUM_CONSTRAINTS_{st}");
 
 //Stream for input file containing all small instances and values from Schneider (2014)
 StreamReader ifs = new StreamReader(pathCFG + p.instancesFile);
@@ -84,13 +88,15 @@ while (!ifs.EndOfStream)
     Solver solver = new Solver(p);
     ofsFinal.Write(solver.outputLine.Replace(',', '.')); //On my computer for float precision, by default a ',' is used, and I want to use '.'
     ofsFinal.Flush(); //Flush to have the latest result written in the file, just for the case if the optimization breaks (i.e. power outage)
+    //help.WriteLine($"{solver.numVars}\t{solver.numConstraints}");
 }
 //Close streams
 ifs.Close();
 ofsFinal.Close();
+//help.Close();
 
 //Sending an email to myslef that the optimization is over
 string machineName = System.Environment.MachineName;
-Misc.SendEmail("Finished\n, Machine name=" + machineName + ", File Name=\n" + p.outputFileName + "\n, MinimizationType=" + p.minimizationType.ToString() + "\n, Travel Time Coeffs=" + p.travelTimeCompType);
-Console.WriteLine("Finished!!!");
+//Misc.SendEmail("Finished\n, Machine name=" + machineName + ", File Name=\n" + p.outputFileName + "\n, MinimizationType=" + p.minimizationType.ToString() + "\n, Travel Time Coeffs=" + p.travelTimeCompType);
+//Console.WriteLine("Finished!!!");
 Console.ReadKey();

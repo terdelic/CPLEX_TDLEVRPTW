@@ -51,6 +51,7 @@ namespace CPLEX_TDTSPTW
         //Linear refuel rate per capacity needed to be recharged
         public double refuelRate;
 
+
         //Discretizied time buckets and speed in those time buckets
         public double[] timeBuckets;
         private double[] speedsInTimeBuckets;
@@ -68,6 +69,9 @@ namespace CPLEX_TDTSPTW
         public double doublePrecision;
         //Varible used to indicate wether the minimization of vehicles is neded or not
         public int knownVehNumberCPLEX;
+
+        //Using new improve MILP model
+        public bool modelWithoutCScopies;
 
         //Variables used when writng the output file
         public string outputFileName;
@@ -104,6 +108,8 @@ namespace CPLEX_TDTSPTW
                 StreamReader ifs = new StreamReader(cfgFilePath);
                 //File conatining the list of all instances to be solved
                 instancesFile = ifs.ReadLine().Split(':')[1].Trim();
+
+                modelWithoutCScopies = Convert.ToBoolean(ifs.ReadLine().Split(':')[1].Trim());
                 //Name of the output file
                 outputFileName = ifs.ReadLine().Split(':')[1].Trim();
                 //Type of minimization
@@ -585,9 +591,10 @@ namespace CPLEX_TDTSPTW
             infeasibleArcs = new bool[users.Count, users.Count];
             for (int i = 0; i < users.Count; i++)
             {
+                User userI = users[i];
                 for (int j = 0; j < users.Count; j++)
                 {
-                    User userI = users[i];
+                    
                     User userJ = users[j];
                     if (i == j) // Obvious condition
                     {
@@ -663,42 +670,42 @@ namespace CPLEX_TDTSPTW
                      * We scale that, as in previous case, that in all time bucetks the energy has to be infeaasible for arc to be infeasbile
                     
                      */
-                    if (!(userI.isDepot) && !(userJ.isDepot) && !(userI.isStation()) && !(userJ.isStation()))
-                    {
-                        departTime = 0;
-                        infeasibleEnergy = true;
-                        for (int k = 0; k < timeBuckets.Length; k++)
-                        {
-                            List<User> pomStations = new List<User>(stations);
-                            for (int IS = 0; IS < stations.Count(); IS++)
-                            {
-                                for (int JS = 0; JS < stations.Count(); JS++)
-                                {
-                                    User stI = stations[IS];
-                                    User stJ = stations[JS];
-                                    if (ener(stI, userI, departTime) + ener(userI, userJ, departTime) + ener(userJ, stJ, departTime) <= batCap)
-                                    {
-                                        infeasibleEnergy = false;
-                                        break;
-                                    }
-                                }
-                                if (infeasibleEnergy == false)
-                                {
-                                    break;
-                                }
-                            }
-                            if (infeasibleEnergy == false)
-                            {
-                                break;
-                            }
-                            departTime = timeBuckets[k];
-                        }
-                        if (infeasibleEnergy == true)
-                        {
-                            infeasibleArcs[i, j] = true;
-                            continue;
-                        }
-                    }
+                    //if (!(userI.isDepot) && !(userJ.isDepot) && !(userI.isStation()) && !(userJ.isStation()))
+                    //{
+                    //    departTime = 0;
+                    //    infeasibleEnergy = true;
+                    //    for (int k = 0; k < timeBuckets.Length; k++)
+                    //    {
+                    //        List<User> pomStations = new List<User>(stations);
+                    //        for (int IS = 0; IS < stations.Count(); IS++)
+                    //        {
+                    //            for (int JS = 0; JS < stations.Count(); JS++)
+                    //            {
+                    //                User stI = stations[IS];
+                    //                User stJ = stations[JS];
+                    //                if (ener(stI, userI, departTime) + ener(userI, userJ, departTime) + ener(userJ, stJ, departTime) <= batCap+doublePrecision)
+                    //                {
+                    //                    infeasibleEnergy = false;
+                    //                    break;
+                    //                }
+                    //            }
+                    //            if (infeasibleEnergy == false)
+                    //            {
+                    //                break;
+                    //            }
+                    //        }
+                    //        if (infeasibleEnergy == false)
+                    //        {
+                    //            break;
+                    //        }
+                    //        departTime = timeBuckets[k];
+                    //    }
+                    //    if (infeasibleEnergy == true)
+                    //    {
+                    //        infeasibleArcs[i, j] = true;
+                    //        continue;
+                    //    }
+                   // }
                 }
             }
         }

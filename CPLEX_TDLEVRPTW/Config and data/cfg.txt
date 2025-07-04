@@ -1,7 +1,8 @@
 ﻿List of instances: instancesSmall.txt
+Using model with removed CS copies: true
 Output File Name: solvedTDLEVRPTW
 Minimization of: TravelTime
-Specific problem instance:  
+Specific problem instance: 
 Observe problem type: all
 Number of customers: 5,10,15
 FigliozziTravelTimeType: A1
