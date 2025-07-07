@@ -309,7 +309,7 @@ namespace CPLEX_TDLEVRPTW
             }
 
             // Equation for time feasibility for arcs leaving customers and depot with max function on begin time - tau j
-            //tex: $\forall i \in V_0, \forall j \in V_{ED} \cup F'~ i\neq j $ $\tau_i+s_i \sum_{k \in K}x_{ij}^k+\sum_{k \in K} (\Theta_{ij}^k \zeta_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K} x_{ij}^k) +2(l_0+gQ)b_{ij} \geq \tau_j$ 
+            //tex: $\forall i \in V_0, \forall j \in V_{ED} \cup F'~ i\neq j $ $\tau_i+s_i \sum_{k \in K}x_{ij}^k+\sum_{k \in K} (\Theta_{ij}^k \zeta_{ij}^k + \eta_{ij}^k x_{ij}^k) + (l_0+gQ)(1-\sum_{k \in K} x_{ij}^k) +2(l_0+gQ)b_{ij} \geq \tau_j$ 
 
             foreach (UserMILP i in md.getV0())
             {
@@ -324,7 +324,7 @@ namespace CPLEX_TDLEVRPTW
                             any = true;
 
                             row[md.Tijk[(i, j, k)]] = p.getSlopeFromLinTime(i.u, j.u, k);
-                            row[md.Xijk[(i, j, k)]] = p.getSectionFromLinTime(i.u, j.u, k) + p.depot.ltw + p.refuelRate * p.batCap + i.u.serviceTime;
+                            row[md.Xijk[(i, j, k)]] = p.getSectionFromLinTime(i.u, j.u, k) -( p.depot.ltw + p.refuelRate * p.batCap) + i.u.serviceTime;
                         }
                     }
                     if (any)
@@ -376,7 +376,7 @@ namespace CPLEX_TDLEVRPTW
             }
 
             // Equation for time feasibility for arcs leaving CSs - max function begin time - tau_j
-            //tex: $\forall i \in F', \forall j \in V_{ED} \cup F'~ i\neq j$ $\tau_i+g(Q-y_i)+\sum_{k \in K} (\Theta_{ij}^k \zeta_{ij}^k + \eta_{ij}^k x_{ij}^k) - (l_0+gQ)(1-\sum_{k \in K}x_{ij}^k)+2b_{ij}(l_0+gQ) \geq \tau_j$ 
+            //tex: $\forall i \in F', \forall j \in V_{ED} \cup F'~ i\neq j$ $\tau_i+g(Q-y_i)+\sum_{k \in K} (\Theta_{ij}^k \zeta_{ij}^k + \eta_{ij}^k x_{ij}^k) + (l_0+gQ)(1-\sum_{k \in K}x_{ij}^k)+2b_{ij}(l_0+gQ) \geq \tau_j$ 
             foreach (UserMILP i in md.getF_())
             {
                 foreach (UserMILP j in md.getVNm_())
@@ -389,7 +389,7 @@ namespace CPLEX_TDLEVRPTW
                         {
                             any = true;
                             row[md.Tijk[(i, j, k)]] = p.getSlopeFromLinTime(i.u, j.u, k);
-                            row[md.Xijk[(i, j, k)]] = p.getSectionFromLinTime(i.u, j.u, k) + p.depot.ltw + p.refuelRate * p.batCap;
+                            row[md.Xijk[(i, j, k)]] = p.getSectionFromLinTime(i.u, j.u, k) - (p.depot.ltw + p.refuelRate * p.batCap);
                         }
                     }
                     if (any)
