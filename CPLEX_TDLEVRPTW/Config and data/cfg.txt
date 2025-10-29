@@ -1,10 +1,10 @@
 ﻿List of instances: instancesSmall.txt
-Using model with removed CS copies: true
+Using model with removed CS copies: false
 Output File Name: solvedTDLEVRPTW
 Minimization of: TravelTime
-Specific problem instance: 
-Observe problem type: all
-Number of customers: 5,10,15
+Specific problem instance: C103-5
+Observe problem type: 
+Number of customers: 
 FigliozziTravelTimeType: A1
 Cplex execution time: 7200
 Multiply coeff of CS vertices in MILP (Beta): 3

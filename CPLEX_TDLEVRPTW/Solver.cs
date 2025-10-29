@@ -15,17 +15,23 @@ using static ILOG.CPLEX.Cplex.Param;
 
 namespace CPLEX_TDTSPTW
 {
+    public class BoolRef
+    {
+        public bool isOptimal;
+    }
     //This is the callback Class used to terminate the search of CPLEX
     // when theory minimal number accoridng to CVRP is found
     internal class TerminateCallback : Cplex.MIPInfoCallback
     {
         double lastSolutionValue;
         int bestTheoryMinVehNum;
+        BoolRef isOptimal;
 
-        internal TerminateCallback(double lastIncumbent, int bestTheoryMin)
+        internal TerminateCallback(double lastIncumbent, int bestTheoryMin, BoolRef isOptimal)
         {
             lastSolutionValue = lastIncumbent;
-            this.bestTheoryMinVehNum = bestTheoryMin;
+            bestTheoryMinVehNum = bestTheoryMin;
+            this.isOptimal = isOptimal;
         }
         public override void Main()
         {
@@ -38,6 +44,7 @@ namespace CPLEX_TDTSPTW
                 //If minimal number of vehicles is found, terminate the optimization
                 if (Convert.ToInt32(Math.Round(lastSolutionValue, 0)) == bestTheoryMinVehNum)
                 {
+                    isOptimal.isOptimal = true;
                     Abort();
                 }
             }
@@ -52,11 +59,21 @@ namespace CPLEX_TDTSPTW
         private int minVehNumOptCPLEX;
         private Cplex.Status statusVehMin;
         private double minVehExecutionTime;
+        private double minVehMIPRelativeGap;
+        private double minVehBestBound;
+        private double minVehAbsoluteGap;
+        private double minVehNodeCount;
+        private double minVehIterCount;
         private Solution bestFindPrim;
         //Secondary objective minimization avriables
         private Cplex.Status statuSecObjMin;
         private double minSecObjExecutionTime;
         private double minSecObjOptCPLEX;
+        private double minSecMIPRelativeGap;
+        private double minSecBestBound;
+        private double minSecAbsoluteGap;
+        private double minSecNodeCount;
+        private double minSecIterCount;
         private Solution bestFindSec;
         //Instances of classes that store the graph values, decision variables and constraints
         //private BasicModel bm;
@@ -375,7 +392,8 @@ namespace CPLEX_TDTSPTW
                 //The default value is large, and here it is limited to a couple of GB (4-8)
                 cplex.SetParam(Cplex.Param.MIP.Limits.TreeMemory, p.memoryLimitCplex);
                 //In vehicle minimization we call a Terminate callbacke to terminate the optimization when minimal theory number is found
-                cplex.Use(new TerminateCallback(double.MaxValue, p.theoryMinNumVehicle));
+                BoolRef isOptimal = new BoolRef { isOptimal = false };
+                cplex.Use(new TerminateCallback(double.MaxValue, p.theoryMinNumVehicle, isOptimal));
                 //Record starting time (to be able to determine overall execution time)
                 double start = cplex.GetCplexTime();
                 if (cplex.Solve())
@@ -385,6 +403,18 @@ namespace CPLEX_TDTSPTW
                     //Get status
                     this.statusVehMin = cplex.GetStatus();
                     cplex.Output().WriteLine("Solution status = " + this.statusVehMin);
+
+                    minVehMIPRelativeGap=cplex.GetMIPRelativeGap();
+                    minVehBestBound= cplex.GetBestObjValue();
+                    minVehAbsoluteGap=Math.Abs(cplex.GetObjValue()-minVehBestBound);
+                    minVehNodeCount=cplex.Nnodes;
+                    minVehIterCount=cplex.Niterations;
+
+                    if (isOptimal.isOptimal)
+                    {
+                        this.statusVehMin = Cplex.Status.Optimal;
+                        Console.WriteLine("From theory min is optimal!");
+                    }
                     //Store the oslution only if its feasible and optimal
                     if (this.statusVehMin == Cplex.Status.Feasible || this.statusVehMin == Cplex.Status.Optimal)
                     {
@@ -584,6 +614,13 @@ namespace CPLEX_TDTSPTW
                         this.minSecObjOptCPLEX = cplex.ObjValue;
                         double[] x = cplex.GetValues(var[0]);
                         double[] slack = cplex.GetSlacks(rng[0]);
+
+                        minSecMIPRelativeGap = cplex.GetMIPRelativeGap();
+                        minSecBestBound = cplex.GetBestObjValue();
+                        minSecAbsoluteGap = Math.Abs(cplex.GetObjValue() - minVehBestBound);
+                        minSecNodeCount = cplex.Nnodes;
+                        minSecIterCount = cplex.Niterations;
+
                         cplex.Output().WriteLine("Secondary objective solution value = " + cplex.ObjValue);
                         //Check solution values
                         checkCplexSolutionOld(x, md, numVehicles, true);
@@ -804,6 +841,12 @@ namespace CPLEX_TDTSPTW
                     //Secondary objective execution time
                     minSecObjExecutionTime = cplex.GetCplexTime() - start;
                     this.statuSecObjMin = cplex.GetStatus();
+                    minSecMIPRelativeGap = cplex.GetMIPRelativeGap();
+                    minSecBestBound = cplex.GetBestObjValue();
+                    minSecAbsoluteGap = Math.Abs(cplex.GetObjValue() - minVehBestBound);
+                    minSecNodeCount = cplex.Nnodes;
+                    minSecIterCount = cplex.Niterations;
+
                     cplex.Output().WriteLine("Secondary objective solution status = " + cplex.GetStatus());
                     //Store variabels only in solution is feasible or optimal
                     if (this.statuSecObjMin == Cplex.Status.Feasible || this.statuSecObjMin == Cplex.Status.Optimal)
@@ -877,8 +920,12 @@ namespace CPLEX_TDTSPTW
             string line = p.orgSolomonName + d + p.orgNumCust + d + p.BKSVehNum + d + p.BKSCost + d + p.numMultiCSVert +
                 d + p.knownVehNumberCPLEX + d + p.minimizationType.ToString() + d +
                 this.minVehNumOptCPLEX + d + this.statusVehMin + d +
-                (this.minVehExecutionTime / 60.0) + d + this.minSecObjOptCPLEX + d +
-                this.statuSecObjMin + d + (minSecObjExecutionTime / 60.0);
+                (this.minVehExecutionTime / 60.0) + d + this.minVehMIPRelativeGap + d + this.minVehBestBound
+                + d + this.minVehAbsoluteGap + d + this.minVehNodeCount + d + this.minVehIterCount+d+
+                this.minSecObjOptCPLEX + d +
+                this.statuSecObjMin + d + (minSecObjExecutionTime / 60.0)
+                + d + this.minSecMIPRelativeGap + d + this.minSecBestBound
+                + d + this.minSecAbsoluteGap + d + this.minSecNodeCount + d + this.minSecIterCount;
             //Get solution details
             if (s != null)
             {
@@ -898,6 +945,31 @@ namespace CPLEX_TDTSPTW
         public void checkCplexSolutionOld(double[] x, MILPDataOld md, int numVehs, bool second)
         {
             int numInputArcsEndDepots = 0;
+
+            // Checking the relation between XIJK and ZIJK
+            foreach (KeyValuePair<(UserMILP, UserMILP, int), int> pair in md.Xijk)
+            {
+                if (x[pair.Value] > p.doublePrecision)
+                {
+                    //This means that xijk is selected edge
+                    UserMILP um = pair.Key.Item1;
+                    if (!(um == md.depot0 || um.u._userID == 1))
+                    {
+                        if(x[md.Tijk[(pair.Key.Item1, pair.Key.Item2, pair.Key.Item3)]] < p.doublePrecision)
+                        {
+                            Misc.errOut($"Zetaijk (Tijk) with value {x[md.Tijk[(pair.Key.Item1, pair.Key.Item2, pair.Key.Item3)]]} should be larger than zero if appropriate xijk is one!");
+                        }
+                    }
+                }
+                else
+                {
+                    if (x[md.Tijk[(pair.Key.Item1, pair.Key.Item2, pair.Key.Item3)]] > p.doublePrecision)
+                    {
+                        Misc.errOut($"Zetaijk (Tijk) with value {x[md.Tijk[(pair.Key.Item1, pair.Key.Item2, pair.Key.Item3)]]} should not be larger than zero if appropriate xijk is zero!");
+                    }
+                }
+            }
+
             foreach (UserMILP um in md.getV0Nm_())
             {
                 //Checking the number of input and exit arc for each user
@@ -981,11 +1053,21 @@ namespace CPLEX_TDTSPTW
                 {
                     Misc.errOut("User " + um.u._userID + " in cplex solution does not satisfy time windows!");
                 }
-                //Checking departure time for each user excpet ending depot which actually does not have a departure time
-                if (!md.endingDepots.Contains(um))
+
+                
+
+
+
+                    //Checking departure time for each user excpet ending depot which actually does not have a departure time
+                    if (!md.endingDepots.Contains(um))
                 {
                     int count = 0;
                     double departureTime = 0;
+                    p.pomVal1++;
+                    if (p.pomVal1 == 9) { 
+                        Console.WriteLine(); }
+
+                    //Leaving arcs
                     foreach (KeyValuePair<(UserMILP, UserMILP, int), int> pair in md.Tijk)
                     {
                         if (x[pair.Value] > p.doublePrecision && pair.Key.Item1 == um)
@@ -998,6 +1080,8 @@ namespace CPLEX_TDTSPTW
 
                         }
                     }
+
+                    
                     //If departure time is used for a user is used multiple times
                     // this would mean that he starts several times, and this was a big question
                     // did i model this part okay or not, as it has to be used only once per user (in all time periods)                    
@@ -1021,7 +1105,8 @@ namespace CPLEX_TDTSPTW
                         Misc.errOut("Wrong set!");
                     }
                     //Compare departure times
-                    if (Math.Abs(departureTime - computedDepartureTime) > p.doublePrecision)
+                    if (Math.Abs(departureTime - computedDepartureTime) > p.doublePrecision &&
+                        !(md.getF_().Contains(um) && count==0))
                     {
                         Misc.errOut("Departure times in cplex solution do not match!");
                     }

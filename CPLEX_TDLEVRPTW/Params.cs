@@ -30,6 +30,7 @@ namespace CPLEX_TDTSPTW
     /* Class Params contains all the input data */
     public partial class Params
     {
+        public int pomVal1;
         //Variables used when reading the input data
         public List<Tuple<string, string>> specificProblems; //List of specific problems that want to be solved
         public string instancesFile; //Path to instance files
@@ -705,7 +706,7 @@ namespace CPLEX_TDTSPTW
                     //        infeasibleArcs[i, j] = true;
                     //        continue;
                     //    }
-                   // }
+                    // }
                 }
             }
         }
